@@ -1,5 +1,8 @@
 from time import sleep
+from config import Config
+
+config = Config("./config.json")
 
 while True:
-    print("Helloww cowboy")
-    sleep(2)
+    print("Hello world")
+    sleep(10)

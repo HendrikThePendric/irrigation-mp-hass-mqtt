@@ -1,0 +1,20 @@
+{
+  "station_name": "Backyard irrigation station",
+  "network": {
+    "wifi_ssid": "Network name",
+    "wifi_password": "Netowrk password",
+    "mqtt_broker_ip": "###.###.##.##"
+  },
+  "irrigation_points": [
+    {
+      "name": "Location A",
+      "valve_pin": 1,
+      "sensor_pin": 2
+    },
+    {
+      "name": "Location B",
+      "valve_pin": 3,
+      "sensor_pin": 4
+    }
+  ]
+}
