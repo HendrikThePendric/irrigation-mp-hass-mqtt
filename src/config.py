@@ -61,8 +61,9 @@ class Config:
         irrigation_points_conf: list = get_if_valid("irrigation_points", conf, list)
 
         self.station_name: str = get_if_valid("station_name", conf, str)
-        self.station_id: str = (
-            f"{_clean_string(self.station_name)}-{_compute_device_id()}"
+        self.station_id: str = _compute_device_id()
+        self.station_mqtt_id: str = (
+            f"{_clean_string(self.station_name)}-{self.station_id}"
         )
         self.network = NetworkConfig(network_conf)
         self.irrigation_points: dict[str, IrrigationPointConfig] = {}
@@ -73,21 +74,20 @@ class Config:
 
     def __str__(self) -> str:
         lines: list[str] = [
-            "=== Irrigation station config ===",
-            f"station_id: {self.station_id}",
-            f"station_name: {self.station_name}",
+            "Irrigation station config:",
+            f"station_id:       {self.station_id}",
+            f"station_mqtt_id:  {self.station_mqtt_id}",
+            f"station_name:     {self.station_name}",
             "network:",
-            f"  wifi_ssid: {self.network.wifi_ssid}",
-            f"  wifi_password: {self.network.wifi_password}",
+            f"  wifi_ssid:      {self.network.wifi_ssid}",
+            f"  wifi_password:  {self.network.wifi_password}",
             f"  mqtt_broker_ip: {self.network.mqtt_broker_ip}",
             "irrigation_points:",
         ]
         for ip in self.irrigation_points.values():
-            lines.append(f"  id: {ip.id}")
-            lines.append(f"    name: {ip.name}")
-            lines.append(f"    valve_pin: {str(ip.valve_pin)}")
-            lines.append(f"    sensor_pin: {str(ip.sensor_pin)}")
-
-        lines.append("---------------------------------")
+            lines.append(f"  id:             {ip.id}")
+            lines.append(f"    name:         {ip.name}")
+            lines.append(f"    valve_pin:    {str(ip.valve_pin)}")
+            lines.append(f"    sensor_pin:   {str(ip.sensor_pin)}")
 
         return "\n".join(lines)
