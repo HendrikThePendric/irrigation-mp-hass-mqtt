@@ -1,5 +1,6 @@
 from network import WLAN, STA_IF
 from rp2 import country
+from machine import reset
 from time import sleep
 from config import NetworkConfig
 from logger import Logger
@@ -21,7 +22,9 @@ def connect_to_wifi(config: NetworkConfig, logger: Logger) -> None:
         sleep(1)
 
     if wlan.status() != 3:
-        raise RuntimeError("WIFI connection failed")
+        logger.log("WIFI connection failed, going to reset")
+        reset()
+
     else:
         info = wlan.ifconfig()
         message = "\n".join(
