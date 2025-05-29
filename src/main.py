@@ -1,23 +1,23 @@
 from time import sleep
-import ntptime
 from logger import Logger
 from config import Config
+from time_keeper import TimeKeeper
 from wifi import connect_to_wifi
 
 sleep(2)
 
-logger = Logger()
+time_keeper = TimeKeeper(3, 1)
+logger = Logger(time_keeper, True)
 config = Config("./config.json")
 
 logger.log(str(config))
 connect_to_wifi(config.network, logger)
-ntptime.settime()
+time_keeper.initialize_ntp_synchronization(logger)
 
 counter = 0
 
 while True:
     counter += 1
     msg = f"B {counter}"
-    print(msg)
     logger.log(msg)
-    sleep(0.005)
+    sleep(0.05)
