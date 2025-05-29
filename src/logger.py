@@ -1,60 +1,53 @@
-from date_time_utils import formatted_cet_date_time
+from machine import Timer
+from os import rename, stat
+from time_keeper import TimeKeeper
 
 
-FILE_PATH = "./log.txt"
-MAX_LOGGED_LINES = 1000
+LOG_FILE_PATH = "./log.txt"
+LOG_FILE_PATH_OLD = "./log-old.txt"
+# Storage capicity is 4MB, 4194304 bytes
+# Max capicity dedicated to logging 25%
+# This is distrubuted over 2 files
+# MAX_FILE_SIZE = (4194304 * 0.25) / 2
+MAX_FILE_SIZE = 500
 
 
 class Logger:
-    def __init__(self) -> None:
-        # Read existing lines from log file so the log
-        # content can be restored after the file is
-        # opened, which clears the content
-        lines: list[str] = []
-        try:
-            with open(FILE_PATH, "r") as file:
-                print("Found exisiting log file")
-                lines = file.readlines()
-        except OSError:
-            print("No log file found, starting new one")
-
-        self.__open_file_with_lines(lines)
-        if self.__logged_lines == 0:
-            self.log("Logger initialised a new log file")
-        else:
-            self.log(
-                f"Logger intialised an existing file with {self.__logged_lines} lines"
-            )
+    def __init__(self, time_keeper: TimeKeeper, should_print=False) -> None:
+        self._tk = time_keeper
+        self._should_print = should_print
+        self._retry_timer: Timer = Timer(-1)
 
     def log(self, msg: str) -> None:
-        msg_line_count = msg.count("\n") + 1
+        dt_str = self._tk.get_current_cet_datetime_str()
+        log_msg = (
+            f"{dt_str} {msg}"
+            if msg.count("\n") == 0
+            else f"{dt_str}============\n{msg}\n-----------------------"
+        )
+        with open(LOG_FILE_PATH, "a") as curr_file:
+            curr_file.write(log_msg + "\n")
+            curr_file.close()
 
-        if msg_line_count == 1:
-            msg = f"{formatted_cet_date_time()} {msg}\n"
-        else:
-            msg = f"{formatted_cet_date_time()} ========\n{msg}\n--------\n"
-            msg_line_count += 2
+        if self._should_print:
+            print(log_msg)
 
-        self.__file.write(msg)
-        self.__file.flush()
-        self.__logged_lines += msg_line_count
+        self._rotate_file_if_needed()
 
-        if self.__logged_lines >= MAX_LOGGED_LINES:
-            self.__clean_log_file()
+    def _rotate_file_if_needed(self) -> None:
+        try:
+            file_size_bytes = stat(LOG_FILE_PATH)[6]
 
-    def __clean_log_file(self) -> None:
-        self.__file.seek(0)
-        lines = self.__file.readlines()
-        lines_length = len(lines)
-        cleaned_lines = ["~~~ Log truncated to reduce log file size ~~~\n"]
-        cleaned_lines_length = int(MAX_LOGGED_LINES / 2) - 1
-        for i in range(lines_length - cleaned_lines_length, lines_length):
-            cleaned_lines.append(lines[i])
-        self.__file.close()
-        self.__open_file_with_lines(cleaned_lines)
+            if file_size_bytes >= MAX_FILE_SIZE:
+                rename(LOG_FILE_PATH, LOG_FILE_PATH_OLD)
+                self.log("Rotated log file")
+        except Exception as e:
+            print(e)
+            # This sometimes happens it is not a big deal because
+            # the file will become available again
+            dt_str = self._tk.get_current_cet_datetime_str()
 
-    def __open_file_with_lines(self, lines) -> None:
-        self.__file = open(FILE_PATH, "w")
-        self.__logged_lines = len(lines)
-        for line in lines:
-            self.__file.write(str(line))
+            def callback(_: Timer):
+                self.log(f"Log file rotation failed at {dt_str}")
+
+            self._retry_timer.init(mode=Timer.ONE_SHOT, period=500, callback=callback)
