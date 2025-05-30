@@ -1,6 +1,6 @@
+from typing import Callable
 from machine import Timer
 from os import rename, stat
-from time_keeper import TimeKeeper
 
 
 LOG_FILE_PATH = "./log.txt"
@@ -12,19 +12,18 @@ LOG_FILE_PATH_OLD = "./log-old.txt"
 MAX_FILE_SIZE = 500
 
 
+def _return_empty_str() -> str:
+    return ""
+
+
 class Logger:
-    def __init__(self, time_keeper: TimeKeeper, should_print=False) -> None:
-        self._tk = time_keeper
-        self._should_print = should_print
+    def __init__(self, should_print=False) -> None:
+        self._should_print: bool = should_print
         self._retry_timer: Timer = Timer(-1)
+        self._get_timestamp: Callable = _return_empty_str
 
     def log(self, msg: str) -> None:
-        dt_str = self._tk.get_current_cet_datetime_str()
-        log_msg = (
-            f"{dt_str} {msg}"
-            if msg.count("\n") == 0
-            else f"{dt_str}============\n{msg}\n-----------------------"
-        )
+        log_msg = self._format_msg(msg)
         with open(LOG_FILE_PATH, "a") as curr_file:
             curr_file.write(log_msg + "\n")
             curr_file.close()
@@ -33,6 +32,21 @@ class Logger:
             print(log_msg)
 
         self._rotate_file_if_needed()
+
+    def enable_timestamp_prefix(self, get_timestamp: Callable) -> None:
+        self._get_timestamp = get_timestamp
+
+    def _format_msg(self, msg: str) -> str:
+        is_single_line = msg.count("\n") == 0
+        timestamp = self._get_timestamp()
+
+        if is_single_line:
+            if timestamp == "":
+                return msg
+            else:
+                return f"{timestamp} {msg}"
+        else:
+            return f"{timestamp}============\n{msg}\n-----------------------"
 
     def _rotate_file_if_needed(self) -> None:
         try:
@@ -45,7 +59,7 @@ class Logger:
             print(e)
             # This sometimes happens it is not a big deal because
             # the file will become available again
-            dt_str = self._tk.get_current_cet_datetime_str()
+            dt_str = self._get_timestamp()
 
             def callback(_: Timer):
                 self.log(f"Log file rotation failed at {dt_str}")

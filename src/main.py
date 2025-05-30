@@ -4,15 +4,23 @@ from config import Config
 from time_keeper import TimeKeeper
 from wifi import connect_to_wifi
 
-sleep(2)
+PRINT_LOGS = True
 
-time_keeper = TimeKeeper(3, 1)
-logger = Logger(time_keeper, True)
+if PRINT_LOGS:
+    # Delay initialization for a bit, to ensure
+    # `mpremote connect` has completed. This
+    # guarrantees that all log statement are going
+    # to be visible
+    sleep(2)
+
+logger = Logger(PRINT_LOGS)
+time_keeper = TimeKeeper(logger, 3, 1)
 config = Config("./config.json")
 
 logger.log(str(config))
 connect_to_wifi(config.network, logger)
-time_keeper.initialize_ntp_synchronization(logger)
+time_keeper.initialize_ntp_synchronization()
+logger.enable_timestamp_prefix(time_keeper.get_current_cet_datetime_str)
 
 counter = 0
 

@@ -1,29 +1,25 @@
 import ntptime
 from machine import RTC, Timer
 import datetime
-import logger as LoggerType
+from logger import Logger
 
 
 class TimeKeeper:
-    def __init__(self, sync_interval=7200, retry_interval=60):
+    def __init__(self, logger: Logger, sync_interval=7200, retry_interval=60):
         self._rtc: RTC = RTC()
         self._sync_timer: Timer = Timer(-1)
         self._sync_interval: int = sync_interval * 1000  # Convert to milliseconds
         self._retry_interval: int = retry_interval * 1000
         self._has_synced: bool = False  # Track first successful sync
-        self._logger: LoggerType.Logger
+        self._logger: Logger = logger
         ntptime.host = "nl.pool.ntp.org"
 
-    def initialize_ntp_synchronization(self, logger: LoggerType.Logger):
+    def initialize_ntp_synchronization(self):
         """Start NTP sync with 2-hour default interval and 1-minute retries"""
-        self._logger = logger
         self._sync_ntp(None)
 
     def get_current_cet_datetime_str(self):
-        """Return formatted CET string or empty if not synced yet"""
-        if not self._has_synced:
-            return ""
-
+        """Return formatted CET string"""
         u = self._get_utc_datetime()
         c = self._utc_to_cet(u)
         return (
