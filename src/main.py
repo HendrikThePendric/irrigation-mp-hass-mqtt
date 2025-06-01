@@ -1,6 +1,7 @@
 from time import sleep
 from logger import Logger
 from config import Config
+from mqtt import mqtt_connect
 from time_keeper import TimeKeeper
 from wifi import connect_to_wifi
 
@@ -21,6 +22,7 @@ logger.log(str(config))
 connect_to_wifi(config.network, logger)
 time_keeper.initialize_ntp_synchronization()
 logger.enable_timestamp_prefix(time_keeper.get_current_cet_datetime_str)
+mqtt_connect()
 
 counter = 0
 
