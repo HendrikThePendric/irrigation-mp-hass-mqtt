@@ -1,9 +1,8 @@
 from time import sleep
 from logger import Logger
 from config import Config
-from mqtt import mqtt_connect
+from mqtt import HassMqttClient
 from time_keeper import TimeKeeper
-from wifi import connect_to_wifi
 
 PRINT_LOGS = True
 
@@ -15,19 +14,20 @@ if PRINT_LOGS:
     sleep(2)
 
 logger = Logger(PRINT_LOGS)
-time_keeper = TimeKeeper(logger, 3, 1)
+time_keeper = TimeKeeper(logger)
 config = Config("./config.json")
+hass_mqtt_client = HassMqttClient(config, logger)
 
 logger.log(str(config))
-connect_to_wifi(config.network, logger)
+hass_mqtt_client.wifi_connnect()
 time_keeper.initialize_ntp_synchronization()
 logger.enable_timestamp_prefix(time_keeper.get_current_cet_datetime_str)
-mqtt_connect()
+hass_mqtt_client.mqtt_connect()
 
 counter = 0
 
 while True:
     counter += 1
-    msg = f"B {counter}"
+    msg = f"Counting: {counter}"
     logger.log(msg)
-    sleep(0.05)
+    sleep(2)
