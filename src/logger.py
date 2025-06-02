@@ -8,8 +8,7 @@ LOG_FILE_PATH_OLD = "./log-old.txt"
 # Storage capicity is 4MB, 4194304 bytes
 # Max capicity dedicated to logging 25%
 # This is distrubuted over 2 files
-# MAX_FILE_SIZE = (4194304 * 0.25) / 2
-MAX_FILE_SIZE = 500
+MAX_FILE_SIZE = (4194304 * 0.25) / 2
 
 
 def _return_empty_str() -> str:
@@ -46,7 +45,7 @@ class Logger:
             else:
                 return f"{timestamp} {msg}"
         else:
-            return f"{timestamp}============\n{msg}\n-----------------------"
+            return f"===={timestamp}====\n{msg}\n-----------------------"
 
     def _rotate_file_if_needed(self) -> None:
         try:
