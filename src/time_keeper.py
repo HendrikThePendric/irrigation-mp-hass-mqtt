@@ -1,7 +1,11 @@
 import ntptime
-from machine import RTC, Timer
+from machine import RTC, Timer, reset
 import datetime
+from time import sleep
 from logger import Logger
+
+INITIAL_RETRY_DELAY = 2
+MAX_INITIAL_RETRY_TIME = 30
 
 
 class TimeKeeper:
@@ -10,13 +14,28 @@ class TimeKeeper:
         self._sync_timer: Timer = Timer(-1)
         self._sync_interval: int = sync_interval * 1000  # Convert to milliseconds
         self._retry_interval: int = retry_interval * 1000
-        self._has_synced: bool = False  # Track first successful sync
         self._logger: Logger = logger
         ntptime.host = "nl.pool.ntp.org"
 
     def initialize_ntp_synchronization(self):
         """Start NTP sync with 2-hour default interval and 1-minute retries"""
-        self._sync_ntp(None)
+        # Initial sync should be a blocking operation. Time must be accurate
+        # before proceeding
+        synced = False
+        retry_time = 0
+        while not synced and retry_time <= MAX_INITIAL_RETRY_TIME:
+            try:
+                ntptime.settime()
+                self._logger.log("Initial NTP sync successful")
+                synced = True
+            except Exception:
+                sleep(INITIAL_RETRY_DELAY)
+                retry_time += INITIAL_RETRY_DELAY
+                self._logger.log(f"Trying to sync NTP ({retry_time}s)")
+
+        if not synced:
+            self._logger.log("Failed to sync NTP, resetting")
+            reset()
 
     def get_current_cet_datetime_str(self):
         """Return formatted CET string"""
@@ -30,17 +49,15 @@ class TimeKeeper:
         """Internal sync handler with success tracking"""
         try:
             ntptime.settime()
-            msg = (
-                "Initial NPT sync successful"
-                if not self._has_synced
-                else "NPT sync successful"
-            )
             self._has_synced = True  # Flag first successful sync
-            self._logger.log(msg)
+            self._logger.log("NTP sync successful")
             self._schedule_normal_sync()
-        except Exception as e:
-            self._logger.log(f"NTP sync failed: {e}")
-            self._schedule_retry()
+        except Exception:
+            if self._has_synced:
+                self._logger.log(
+                    f"NTP sync failed retrying again in {self._retry_interval}"
+                )
+                self._schedule_retry()
 
     def _schedule_normal_sync(self):
         """2-hour sync interval"""
