@@ -2,7 +2,7 @@ from config import Config
 from logger import Logger
 from machine import reset
 from network import WLAN, STA_IF
-from rp2 import country  # type: ignore
+from rp2 import country
 from ssl import SSLContext, PROTOCOL_TLS_CLIENT
 from time import sleep
 from umqtt.simple import MQTTClient
