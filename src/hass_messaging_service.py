@@ -99,7 +99,7 @@ class HassMessagingService:
 
         for point_id, point in self._config.irrigation_points.items():
             sensor_unique_id = f"{point_id}_sensor"
-            switch_unique_id = f"{point_id}_valve"
+            valve_unique_id = f"{point_id}_valve"
             discovery_id = f"{self._config.station_id}-{point_id}"
 
             # Sensor
@@ -116,16 +116,17 @@ class HassMessagingService:
             sensor_topic = f"{discovery_prefix}/sensor/{discovery_id}/config"
             self._publish(sensor_topic, sensor_config)
 
-            # Switch (valve)
-            switch_config = {
+            # Valve (MQTT Valve platform)
+            valve_config = {
                 "name": f"{point.name} Valve",
-                "unique_id": switch_unique_id,
+                "unique_id": valve_unique_id,
                 "state_topic": f"{base_state_topic}/{point_id}/valve/state",
                 "command_topic": f"{base_state_topic}/{point_id}/valve/set",
-                "payload_on": "ON",
-                "payload_off": "OFF",
+                "payload_open": "OPEN",
+                "payload_close": "CLOSED",
                 "availability_topic": f"{base_state_topic}/availability",
                 "device": device_info,
+                "device_class": "water",
             }
-            switch_topic = f"{discovery_prefix}/switch/{discovery_id}/config"
-            self._publish(switch_topic, switch_config)
+            valve_topic = f"{discovery_prefix}/valve/{discovery_id}/config"
+            self._publish(valve_topic, valve_config)

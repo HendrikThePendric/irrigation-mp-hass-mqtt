@@ -4,7 +4,7 @@ from config import Config, IrrigationPointConfig
 class IrrigationPoint:
     def __init__(self, config: IrrigationPointConfig) -> None:
         self._config = config
-        self._valve_state: str = "OFF"
+        self._valve_state: str = "CLOSED"
 
     def get_sensor_value(self) -> float:
         value = 0.5  # Mocked value
@@ -12,11 +12,11 @@ class IrrigationPoint:
         return value
 
     def open_valve(self) -> None:
-        self._valve_state = "ON"
+        self._valve_state = "OPEN"
         print(f"[Valve] {self._config.name}: Valve opened.")
 
     def close_valve(self) -> None:
-        self._valve_state = "OFF"
+        self._valve_state = "CLOSED"
         print(f"[Valve] {self._config.name}: Valve closed.")
 
     def get_valve_state(self) -> str:
