@@ -35,4 +35,7 @@ while True:
     counter += 1
     msg = f"Counting: {counter}"
     logger.log(msg)
-    sleep(2)
+    mqtt_client.check_msg()
+    time_keeper.handle_pending_ntp_sync()
+    hass_messaging_service.handle_pending_publish()
+    sleep(1)

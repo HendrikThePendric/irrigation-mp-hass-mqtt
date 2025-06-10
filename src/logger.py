@@ -50,17 +50,8 @@ class Logger:
     def _rotate_file_if_needed(self) -> None:
         try:
             file_size_bytes = stat(LOG_FILE_PATH)[6]
-
             if file_size_bytes >= MAX_FILE_SIZE:
                 rename(LOG_FILE_PATH, LOG_FILE_PATH_OLD)
                 self.log("Rotated log file")
         except Exception as e:
-            print(e)
-            # This sometimes happens it is not a big deal because
-            # the file will become available again
-            dt_str = self._get_timestamp()
-
-            def callback(_: Timer):
-                self.log(f"Log file rotation failed at {dt_str}")
-
-            self._retry_timer.init(mode=Timer.ONE_SHOT, period=500, callback=callback)
+            print(f"Log file rotation failed, will try again on next log: {e}")

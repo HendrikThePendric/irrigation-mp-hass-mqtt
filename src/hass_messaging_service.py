@@ -22,6 +22,7 @@ class HassMessagingService:
         self._logger = logger
         self._station = station
         self._timer = Timer(-1)
+        self._pending_publish = False
         self._setup_lwt()
         self._setup_subscriptions()
         self.publish_discovery_messages()
@@ -69,10 +70,15 @@ class HassMessagingService:
         self._timer.init(
             period=PUBLISH_INTERVAL,
             mode=Timer.PERIODIC,
-            callback=self._publish_sensor_data,
+            callback=lambda t: self._set_pending_publish()
         )
 
-    def _publish_sensor_data(self, timer):
+    def _set_pending_publish(self):
+        self._pending_publish = True
+
+    def handle_pending_publish(self):
+        if not self._pending_publish:
+            return
         for point_id in self._config.irrigation_points:
             point = self._station.get_point(point_id)
             value = point.get_sensor_value()
@@ -80,6 +86,7 @@ class HassMessagingService:
             payload = dumps({"moisture": round(value * 100, 2)})
             self._client.publish(topic, payload)
             self._logger.log(f"Published sensor data to {topic}\n{payload}")
+        self._pending_publish = False
 
     def _publish(self, topic, payload):
         self._client.publish(topic, dumps(payload), retain=True)
