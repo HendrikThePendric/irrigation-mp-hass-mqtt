@@ -28,7 +28,7 @@ class HassMqttClient:
         self._client = None
         country("nl")
 
-    def wifi_connnect(self) -> None:
+    def wifi_connect(self) -> None:
         self._wlan.active(True)
         self._wlan.connect(
             self._config.network.wifi_ssid, self._config.network.wifi_password

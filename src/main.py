@@ -23,7 +23,7 @@ hass_mqtt_client = HassMqttClient(config, logger)
 
 
 logger.log(str(config))
-hass_mqtt_client.wifi_connnect()
+hass_mqtt_client.wifi_connect()
 time_keeper.initialize_ntp_synchronization()
 logger.enable_timestamp_prefix(time_keeper.get_current_cet_datetime_str)
 mqtt_client = hass_mqtt_client.mqtt_connect()
