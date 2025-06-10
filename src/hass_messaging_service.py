@@ -1,12 +1,12 @@
 from json import dumps
 from machine import Timer
-from time import ticks_ms
 from umqtt.simple import MQTTClient
-from config import Config, IrrigationPointConfig
+from config import Config
 from logger import Logger
 from irrigation_station import IrrigationStation
 
-PUBLISH_INTERVAL = 240_000  # milliseconds (4 minutes)
+# PUBLISH_INTERVAL = 240_000  # milliseconds (4 minutes)
+PUBLISH_INTERVAL = 10000
 
 
 class HassMessagingService:

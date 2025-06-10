@@ -59,7 +59,7 @@ class HassMqttClient:
             )
             self._logger.log(message)
 
-    def mqtt_connect(self) -> None:
+    def mqtt_connect(self) -> MQTTClient:
         ssl_context = SSLContext(PROTOCOL_TLS_CLIENT)
         ssl_context.load_verify_locations(cafile=CA_PATH)
         ssl_context.load_cert_chain(certfile=CERT_PATH, keyfile=KEY_PATH)
@@ -95,3 +95,4 @@ class HassMqttClient:
             ]
         )
         self._logger.log(message)
+        return self._client

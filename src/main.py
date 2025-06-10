@@ -1,4 +1,6 @@
 from time import sleep
+from hass_messaging_service import HassMessagingService
+from irrigation_station import IrrigationStation
 from logger import Logger
 from config import Config
 from mqtt import HassMqttClient
@@ -16,13 +18,16 @@ if PRINT_LOGS:
 logger = Logger(PRINT_LOGS)
 time_keeper = TimeKeeper(logger)
 config = Config("./config.json")
+station = IrrigationStation(config)
 hass_mqtt_client = HassMqttClient(config, logger)
+
 
 logger.log(str(config))
 hass_mqtt_client.wifi_connnect()
 time_keeper.initialize_ntp_synchronization()
 logger.enable_timestamp_prefix(time_keeper.get_current_cet_datetime_str)
-hass_mqtt_client.mqtt_connect()
+mqtt_client = hass_mqtt_client.mqtt_connect()
+hass_messaging_service = HassMessagingService(config, mqtt_client, logger, station)
 
 counter = 0
 

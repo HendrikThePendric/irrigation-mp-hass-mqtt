@@ -5,11 +5,16 @@ class IrrigationPoint:
     def __init__(self, config: IrrigationPointConfig) -> None:
         self._config = config
         self._valve_state: str = "CLOSED"
+        self._sensor_value = 0.5
 
     def get_sensor_value(self) -> float:
-        value = 0.5  # Mocked value
-        print(f"[Sensor] {self._config.name}: Moisture level is {value * 100:.1f}%")
-        return value
+        self._sensor_value += 0.1
+        if self._sensor_value > 1:
+            self._sensor_value = 0
+        print(
+            f"[Sensor] {self._config.name}: Moisture level is {self._sensor_value * 100:.1f}%"
+        )
+        return self._sensor_value
 
     def open_valve(self) -> None:
         self._valve_state = "OPEN"
