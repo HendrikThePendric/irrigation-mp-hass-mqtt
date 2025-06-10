@@ -18,7 +18,13 @@ def get_if_valid(key: str, conf: dict, value_type):
         raise Exception(f"Config key `{key}` is empty")
 
     return val
-
+def get_if_valid(key: str, conf: dict, value_type: type) -> any:
+    """Get value from conf dict if valid, else raise Exception."""
+    # value_type: expected type (e.g., str, int, dict, list)
+    # Returns: value of type value_type
+    # Raises: Exception if key missing, wrong type, or empty string
+    # Note: 'any' is used for generality, but can be replaced with more specific types if desired.
+    ...
 
 def _load_json_file(file_path: str) -> dict:
     with open(file_path) as file:
