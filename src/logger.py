@@ -16,13 +16,13 @@ def _return_empty_str() -> str:
 
 
 class Logger:
-    def __init__(self, should_print=False) -> None:
+    def __init__(self, should_print: bool = False) -> None:
         self._should_print: bool = should_print
         self._retry_timer: Timer = Timer(-1)
-        self._get_timestamp: Callable = _return_empty_str
+        self._get_timestamp: Callable[[], str] = _return_empty_str
 
     def log(self, msg: str) -> None:
-        log_msg = self._format_msg(msg)
+        log_msg: str = self._format_msg(msg)
         with open(LOG_FILE_PATH, "a") as curr_file:
             curr_file.write(log_msg + "\n")
             curr_file.close()
@@ -32,12 +32,12 @@ class Logger:
 
         self._rotate_file_if_needed()
 
-    def enable_timestamp_prefix(self, get_timestamp: Callable) -> None:
+    def enable_timestamp_prefix(self, get_timestamp: Callable[[], str]) -> None:
         self._get_timestamp = get_timestamp
 
     def _format_msg(self, msg: str) -> str:
-        is_single_line = msg.count("\n") == 0
-        timestamp = self._get_timestamp()
+        is_single_line: bool = msg.count("\n") == 0
+        timestamp: str = self._get_timestamp()
 
         if is_single_line:
             if timestamp == "":
@@ -49,7 +49,7 @@ class Logger:
 
     def _rotate_file_if_needed(self) -> None:
         try:
-            file_size_bytes = stat(LOG_FILE_PATH)[6]
+            file_size_bytes: int = stat(LOG_FILE_PATH)[6]
             if file_size_bytes >= MAX_FILE_SIZE:
                 rename(LOG_FILE_PATH, LOG_FILE_PATH_OLD)
                 self.log("Rotated log file")

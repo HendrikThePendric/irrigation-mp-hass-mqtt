@@ -16,7 +16,7 @@ class HassMessagingService:
         mqtt_client: MQTTClient,
         logger: Logger,
         station: IrrigationStation,
-    ):
+    ) -> None:
         self._config = config
         self._client = mqtt_client
         self._logger = logger
@@ -28,7 +28,7 @@ class HassMessagingService:
         self.publish_discovery_messages()
         self._start_periodic_publish()
 
-    def _setup_lwt(self):
+    def _setup_lwt(self) -> None:
         self._client.set_last_will(
             topic=f"irrigation/{self._config.station_id}/availability",
             msg="offline",
@@ -39,14 +39,14 @@ class HassMessagingService:
             f"irrigation/{self._config.station_id}/availability", "online", retain=True
         )
 
-    def _setup_subscriptions(self):
+    def _setup_subscriptions(self) -> None:
         for point_id in self._config.irrigation_points:
             topic = f"irrigation/{self._config.station_id}/{point_id}/valve/set"
             self._client.set_callback(self._handle_message)
             self._client.subscribe(topic)
             self._logger.log(f"Subscribed to {topic}")
 
-    def _handle_message(self, topic_bytes, msg_bytes):
+    def _handle_message(self, topic_bytes: bytes, msg_bytes: bytes) -> None:
         topic = topic_bytes.decode()
         msg = msg_bytes.decode()
 
@@ -66,17 +66,17 @@ class HassMessagingService:
         state_topic = f"irrigation/{self._config.station_id}/{point_id}/valve/state"
         self._client.publish(state_topic, point.get_valve_state(), retain=True)
 
-    def _start_periodic_publish(self):
+    def _start_periodic_publish(self) -> None:
         self._timer.init(
             period=PUBLISH_INTERVAL,
             mode=Timer.PERIODIC,
             callback=lambda t: self._set_pending_publish()
         )
 
-    def _set_pending_publish(self):
+    def _set_pending_publish(self) -> None:
         self._pending_publish = True
 
-    def handle_pending_publish(self):
+    def handle_pending_publish(self) -> None:
         if not self._pending_publish:
             return
         for point_id in self._config.irrigation_points:
@@ -88,11 +88,11 @@ class HassMessagingService:
             self._logger.log(f"Published sensor data to {topic}\n{payload}")
         self._pending_publish = False
 
-    def _publish(self, topic, payload):
+    def _publish(self, topic: str, payload: dict) -> None:
         self._client.publish(topic, dumps(payload), retain=True)
         self._logger.log(f"Published discovery config to {topic}\n{payload}")
 
-    def publish_discovery_messages(self):
+    def publish_discovery_messages(self) -> None:
         discovery_prefix = "homeassistant"
         base_state_topic = f"irrigation/{self._config.station_id}"
 

@@ -9,7 +9,7 @@ MAX_INITIAL_RETRY_TIME = 30
 
 
 class TimeKeeper:
-    def __init__(self, logger: Logger, sync_interval=7200, retry_interval=60):
+    def __init__(self, logger: Logger, sync_interval: int = 7200, retry_interval: int = 60) -> None:
         self._rtc: RTC = RTC()
         self._sync_timer: Timer = Timer(-1)
         self._sync_interval: int = sync_interval * 1000  # Convert to milliseconds
@@ -21,7 +21,7 @@ class TimeKeeper:
     def initialize_ntp_synchronization(self):
         """Start NTP sync with 2-hour default interval and 1-minute retries"""
         # Initial sync should be a blocking operation. Time must be accurate
-    def initialize_ntp_synchronization(self):
+    def initialize_ntp_synchronization(self) -> None:
         synced = False
         retry_time = 0
         while not synced and retry_time <= MAX_INITIAL_RETRY_TIME:
@@ -40,24 +40,24 @@ class TimeKeeper:
 
         self._schedule_normal_sync()
 
-    def _schedule_normal_sync(self):
+    def _schedule_normal_sync(self) -> None:
         self._sync_timer.init(
             period=self._sync_interval,
             mode=Timer.ONE_SHOT,
             callback=lambda t: self._set_pending_ntp_sync()
         )
 
-    def _schedule_retry(self):
+    def _schedule_retry(self) -> None:
         self._sync_timer.init(
             period=self._retry_interval,
             mode=Timer.ONE_SHOT,
             callback=lambda t: self._set_pending_ntp_sync()
         )
 
-    def _set_pending_ntp_sync(self):
+    def _set_pending_ntp_sync(self) -> None:
         self._pending_ntp_sync = True
 
-    def handle_pending_ntp_sync(self):
+    def handle_pending_ntp_sync(self) -> None:
         if not self._pending_ntp_sync:
             return
         try:
@@ -71,7 +71,7 @@ class TimeKeeper:
             self._schedule_retry()
         self._pending_ntp_sync = False
 
-    def get_current_cet_datetime_str(self):
+    def get_current_cet_datetime_str(self) -> str:
         """Return formatted CET string"""
         u = self._get_utc_datetime()
         c = self._utc_to_cet(u)
@@ -105,12 +105,12 @@ class TimeKeeper:
             period=self._retry_interval, mode=Timer.ONE_SHOT, callback=self._sync_ntp
         )
 
-    def _get_utc_datetime(self):
+    def _get_utc_datetime(self) -> datetime.datetime:
         """Get current UTC time from RTC"""
         t = self._rtc.datetime()
         return datetime.datetime(t[0], t[1], t[2], t[4], t[5], t[6])
 
-    def _utc_to_cet(self, utc_time):
+    def _utc_to_cet(self, utc_time: datetime.datetime) -> datetime.datetime:
         """DST-aware UTC to CET conversion"""
         year = utc_time.year
 
