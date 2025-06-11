@@ -18,7 +18,7 @@ if PRINT_LOGS:
 logger = Logger(PRINT_LOGS)
 time_keeper = TimeKeeper(logger)
 config = Config("./config.json")
-station = IrrigationStation(config)
+station = IrrigationStation(config, logger)
 hass_mqtt_client = HassMqttClient(config, logger)
 
 
@@ -28,8 +28,6 @@ time_keeper.initialize_ntp_synchronization()
 logger.enable_timestamp_prefix(time_keeper.get_current_cet_datetime_str)
 mqtt_client = hass_mqtt_client.mqtt_connect()
 hass_messaging_service = HassMessagingService(config, mqtt_client, logger, station)
-
-counter = 0
 
 
 def main() -> None:
@@ -45,8 +43,10 @@ def main() -> None:
             sleep(1)
     except Exception as e:
         import traceback
+
         logger.log(f"Exception in main loop: {e}\n{traceback.format_exc()}")
         from machine import reset
+
         reset()
 
 
