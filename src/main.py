@@ -31,16 +31,24 @@ hass_messaging_service = HassMessagingService(config, mqtt_client, logger, stati
 
 counter = 0
 
+
 def main() -> None:
     counter: int = 0
-    while True:
-        counter += 1
-        msg: str = f"Counting: {counter}"
-        logger.log(msg)
-        mqtt_client.check_msg()
-        time_keeper.handle_pending_ntp_sync()
-        hass_messaging_service.handle_pending_publish()
-        sleep(1)
+    try:
+        while True:
+            counter += 1
+            msg: str = f"Counting: {counter}"
+            logger.log(msg)
+            mqtt_client.check_msg()
+            time_keeper.handle_pending_ntp_sync()
+            hass_messaging_service.handle_pending_publish()
+            sleep(1)
+    except Exception as e:
+        import traceback
+        logger.log(f"Exception in main loop: {e}\n{traceback.format_exc()}")
+        from machine import reset
+        reset()
+
 
 if __name__ == "__main__":
     main()

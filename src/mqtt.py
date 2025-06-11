@@ -34,6 +34,7 @@ class HassMqttClient:
             self._config.network.wifi_ssid, self._config.network.wifi_password
         )
 
+        self._retry_time = 0
         while self._retry_time <= MAX_RETRY_TIME:
             if self._wlan.status() < 0 or self._wlan.status() >= 3:
                 break
@@ -44,7 +45,6 @@ class HassMqttClient:
         if self._wlan.status() != 3:
             self._logger.log("WIFI connection failed, going to reset")
             reset()
-
         else:
             self._retry_time = 0
             info = self._wlan.ifconfig()
@@ -70,6 +70,7 @@ class HassMqttClient:
             keepalive=KEEPALIVE,
             ssl=ssl_context,
         )
+        self._retry_time = 0
         connected = False
         while not connected and self._retry_time <= MAX_RETRY_TIME:
             try:

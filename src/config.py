@@ -3,28 +3,22 @@ from json import load
 from machine import unique_id
 
 
-def get_if_valid(key: str, conf: dict, value_type):
+def get_if_valid(key: str, conf: dict, value_type: type) -> any:  # type: ignore
     if key not in conf:
-        raise Exception(f"Config key `{key}` is missing")
+        raise KeyError(f"Config key `{key}` is missing")
 
     val = conf[key]
 
     if not isinstance(val, value_type):
-        raise Exception(
-            f"Type of `{key}` is `{type(val).__name__}`, expected `{value_type.__name__}`"
+        raise TypeError(
+            f"Type of `{key}` is `{type(val).__name__}, expected `{value_type.__name__}`"
         )
 
     if val == "":
-        raise Exception(f"Config key `{key}` is empty")
+        raise ValueError(f"Config key `{key}` is empty")
 
     return val
-def get_if_valid(key: str, conf: dict, value_type: type) -> any:
-    """Get value from conf dict if valid, else raise Exception."""
-    # value_type: expected type (e.g., str, int, dict, list)
-    # Returns: value of type value_type
-    # Raises: Exception if key missing, wrong type, or empty string
-    # Note: 'any' is used for generality, but can be replaced with more specific types if desired.
-    ...
+
 
 def _load_json_file(file_path: str) -> dict:
     with open(file_path) as file:
@@ -37,12 +31,8 @@ def _clean_string(input: str) -> str:
 
 
 def _compute_device_id() -> str:
-    device_id_byte_str = unique_id()
-    byte_int_list = list(device_id_byte_str)
-    byte_str_list = map(str, byte_int_list)
-    bytes_str = "".join(byte_str_list)
-    last_8_chars = bytes_str[-8:]
-    return last_8_chars
+    # Use last 8 hex digits of unique_id for a standard device ID
+    return ''.join(f'{b:02x}' for b in unique_id())[-8:]
 
 
 class NetworkConfig:

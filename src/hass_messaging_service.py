@@ -23,6 +23,8 @@ class HassMessagingService:
         self._station = station
         self._timer = Timer(-1)
         self._pending_publish = False
+        # Set callback once
+        self._client.set_callback(self._handle_message)
         self._setup_lwt()
         self._setup_subscriptions()
         self.publish_discovery_messages()
@@ -35,16 +37,21 @@ class HassMessagingService:
             retain=True,
             qos=0,
         )
-        self._client.publish(
-            f"irrigation/{self._config.station_id}/availability", "online", retain=True
-        )
+        try:
+            self._client.publish(
+                f"irrigation/{self._config.station_id}/availability", "online", retain=True
+            )
+        except Exception as e:
+            self._logger.log(f"Failed to publish LWT online message: {e}")
 
     def _setup_subscriptions(self) -> None:
         for point_id in self._config.irrigation_points:
             topic = f"irrigation/{self._config.station_id}/{point_id}/valve/set"
-            self._client.set_callback(self._handle_message)
-            self._client.subscribe(topic)
-            self._logger.log(f"Subscribed to {topic}")
+            try:
+                self._client.subscribe(topic)
+                self._logger.log(f"Subscribed to {topic}")
+            except Exception as e:
+                self._logger.log(f"Failed to subscribe to {topic}: {e}")
 
     def _handle_message(self, topic_bytes: bytes, msg_bytes: bytes) -> None:
         topic = topic_bytes.decode()
@@ -64,16 +71,19 @@ class HassMessagingService:
             point.close_valve()
 
         state_topic = f"irrigation/{self._config.station_id}/{point_id}/valve/state"
-        self._client.publish(state_topic, point.get_valve_state(), retain=True)
+        try:
+            self._client.publish(state_topic, point.get_valve_state(), retain=True)
+        except Exception as e:
+            self._logger.log(f"Failed to publish valve state to {state_topic}: {e}")
 
     def _start_periodic_publish(self) -> None:
         self._timer.init(
             period=PUBLISH_INTERVAL,
             mode=Timer.PERIODIC,
-            callback=lambda t: self._set_pending_publish()
+            callback=self._set_pending_publish,
         )
 
-    def _set_pending_publish(self) -> None:
+    def _set_pending_publish(self, _=None) -> None:
         self._pending_publish = True
 
     def handle_pending_publish(self) -> None:
@@ -84,13 +94,19 @@ class HassMessagingService:
             value = point.get_sensor_value()
             topic = f"irrigation/{self._config.station_id}/{point_id}/sensor"
             payload = dumps({"moisture": round(value * 100, 2)})
-            self._client.publish(topic, payload)
-            self._logger.log(f"Published sensor data to {topic}\n{payload}")
+            try:
+                self._client.publish(topic, payload)
+                self._logger.log(f"Published sensor data to {topic}\n{payload}")
+            except Exception as e:
+                self._logger.log(f"Failed to publish sensor data to {topic}: {e}")
         self._pending_publish = False
 
     def _publish(self, topic: str, payload: dict) -> None:
-        self._client.publish(topic, dumps(payload), retain=True)
-        self._logger.log(f"Published discovery config to {topic}\n{payload}")
+        try:
+            self._client.publish(topic, dumps(payload), retain=True)
+            self._logger.log(f"Published discovery config to {topic}\n{payload}")
+        except Exception as e:
+            self._logger.log(f"Failed to publish discovery config to {topic}: {e}")
 
     def publish_discovery_messages(self) -> None:
         discovery_prefix = "homeassistant"
