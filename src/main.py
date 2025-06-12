@@ -31,12 +31,8 @@ hass_messaging_service = HassMessagingService(config, mqtt_client, logger, stati
 
 
 def main() -> None:
-    counter: int = 0
     try:
         while True:
-            counter += 1
-            msg: str = f"Counting: {counter}"
-            logger.log(msg)
             mqtt_client.check_msg()
             time_keeper.handle_pending_ntp_sync()
             hass_messaging_service.handle_pending_publish()

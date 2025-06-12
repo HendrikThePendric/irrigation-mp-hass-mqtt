@@ -3,11 +3,16 @@ from config import Config, IrrigationPointConfig
 
 from logger import Logger
 
+
+
 class IrrigationPoint:
+    STATE_OPEN = "open"
+    STATE_CLOSED = "closed"
+
     def __init__(self, config: IrrigationPointConfig, logger: Logger) -> None:
         """Initialize an irrigation point with its configuration."""
-        self._config = config
-        self._valve_state: str = "CLOSED"
+        self.config = config
+        self._valve_state: str = IrrigationPoint.STATE_CLOSED
         self._sensor_value = 0.5
         self._logger = logger
 
@@ -17,23 +22,25 @@ class IrrigationPoint:
         if self._sensor_value > 1:
             self._sensor_value = 0
         self._logger.log(
-            f"[Sensor] {self._config.name}: Moisture level is {self._sensor_value * 100:.1f}%"
+            f"[Sensor] {self.config.name}: Moisture level is {self._sensor_value * 100:.1f}%"
         )
         return self._sensor_value
 
     def open_valve(self) -> None:
         """Open the irrigation valve for this point."""
-        self._valve_state = "OPEN"
-        self._logger.log(f"[Valve] {self._config.name}: Valve opened.")
+        self._valve_state = IrrigationPoint.STATE_OPEN
+        self._logger.log(f"[Valve] {self.config.name}: Valve opened.")
 
     def close_valve(self) -> None:
         """Close the irrigation valve for this point."""
-        self._valve_state = "CLOSED"
-        self._logger.log(f"[Valve] {self._config.name}: Valve closed.")
+        self._valve_state = IrrigationPoint.STATE_CLOSED
+        self._logger.log(f"[Valve] {self.config.name}: Valve closed.")
 
     def get_valve_state(self) -> str:
-        """Return the current state (OPEN/CLOSED) of the valve."""
-        self._logger.log(f"[Valve] {self._config.name}: Valve state is {self._valve_state}")
+        """Return the current state (open/closed) of the valve."""
+        self._logger.log(
+            f"[Valve] {self.config.name}: Valve state is {self._valve_state}"
+        )
         return self._valve_state
 
 

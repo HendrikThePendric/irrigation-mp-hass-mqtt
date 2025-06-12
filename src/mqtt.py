@@ -74,6 +74,12 @@ class HassMqttClient:
         connected = False
         while not connected and self._retry_time <= MAX_RETRY_TIME:
             try:
+                self._client.set_last_will(
+                    topic=f"irrigation/{self._config.station_id}/availability",
+                    msg="offline",
+                    retain=True,
+                    qos=0,
+                )
                 self._client.connect()
                 connected = True
             except OSError:
