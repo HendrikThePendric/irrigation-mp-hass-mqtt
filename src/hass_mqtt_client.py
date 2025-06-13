@@ -46,7 +46,7 @@ class HassMqttClient:
             "identifiers": [self._config.station_id],
             "name": self._config.station_name,
             "manufacturer": "HenkNet IoT",
-            "model": "Pico 2",
+            "model": "Raspberry Pi Pico 2 W",
             "sw_version": "0.1",
         }
         self._client = MQTTClient(
