@@ -55,10 +55,14 @@ class Logger:
             if file_size_bytes >= MAX_FILE_SIZE:
                 rename(LOG_FILE_PATH, LOG_FILE_PATH_OLD)
                 # Avoid recursion: write directly to file instead of calling self.log
-                msg = "Rotated log file"
+                msg = self._format_msg("Rotated log file")
                 with open(LOG_FILE_PATH, "a") as curr_file:
                     curr_file.write(msg + "\n")
                 if self._should_print:
                     print(msg)
         except OSError as e:
-            print(f"Log file rotation failed, will try again on next log: {e}")
+            print(
+                self._format_msg(
+                    f"Log file rotation failed, will try again on next log: {e}"
+                )
+            )
