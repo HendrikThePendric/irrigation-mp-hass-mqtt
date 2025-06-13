@@ -3,7 +3,7 @@ from umqtt.robust import MQTTClient
 from config import Config
 from logger import Logger
 from irrigation_station import IrrigationStation
-from hass_entities import SensorMessager, ValveMessager
+from hass_entities import SensorMessager, ValveMessager, MessagerParams
 from machine import reset
 from ssl import SSLContext, PROTOCOL_TLS_CLIENT
 from time import sleep
@@ -116,24 +116,19 @@ class HassMqttClient:
     def _setup_entities(self) -> None:
         for _, point in self._config.irrigation_points.items():
             irrigation_point = self._station.get_point(point.id)
-            sensor_messager = SensorMessager(
-                self._client,
-                self._config.station_id,
-                irrigation_point,
-                self._device_info,
-                self._availability_topic,
-                self._logger,
-            )
-            self._sensor_messagers.append(sensor_messager)
 
-            valve_messager = ValveMessager(
-                self._client,
-                self._config.station_id,
-                irrigation_point,
-                self._device_info,
-                self._availability_topic,
-                self._logger,
+            params = MessagerParams(
+                mqtt_client=self._client,
+                station_id=self._config.station_id,
+                irrigation_point=irrigation_point,
+                device_info=self._device_info,
+                availability_topic=self._availability_topic,
+                logger=self._logger,
             )
+            sensor_messager = SensorMessager(params)
+            valve_messager = ValveMessager(params)
+
+            self._sensor_messagers.append(sensor_messager)
             self._valve_messagers.append(valve_messager)
             self._command_topic_to_valve[valve_messager._command_topic] = valve_messager
             try:

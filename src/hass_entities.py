@@ -6,22 +6,29 @@ from logger import Logger
 from irrigation_station import IrrigationPoint
 
 
+
+from collections import namedtuple
+
+MessagerParams = namedtuple(
+    "MessagerParams",
+    [
+        "mqtt_client",
+        "station_id",
+        "irrigation_point",
+        "device_info",
+        "availability_topic",
+        "logger",
+    ]
+)
+
 class BaseMessager:
-    def __init__(
-        self,
-        mqtt_client: MQTTClient,
-        station_id: str,
-        irrigation_point: IrrigationPoint,
-        device_info: Dict[str, Any],
-        availability_topic: str,
-        logger: Logger,
-    ) -> None:
-        self._client: MQTTClient = mqtt_client
-        self._station_id: str = station_id
-        self._point: IrrigationPoint = irrigation_point
-        self._device_info: Dict[str, Any] = device_info
-        self._availability_topic: str = availability_topic
-        self._logger: Logger = logger
+    def __init__(self, params: 'MessagerParams') -> None:
+        self._client: MQTTClient = params.mqtt_client
+        self._station_id: str = params.station_id
+        self._point: IrrigationPoint = params.irrigation_point
+        self._device_info: Dict[str, Any] = params.device_info
+        self._availability_topic: str = params.availability_topic
+        self._logger: Logger = params.logger
 
     def _publish_discovery_message(self) -> None:
         raise NotImplementedError(
@@ -40,25 +47,10 @@ class BaseMessager:
 
 
 class SensorMessager(BaseMessager):
-    def __init__(
-        self,
-        mqtt_client: MQTTClient,
-        station_id: str,
-        irrigation_point: Any,
-        device_info: Dict[str, Any],
-        availability_topic: str,
-        logger: Logger,
-    ) -> None:
-        super().__init__(
-            mqtt_client,
-            station_id,
-            irrigation_point,
-            device_info,
-            availability_topic,
-            logger,
-        )
+    def __init__(self, params: MessagerParams) -> None:
+        super().__init__(params)
         self._state_topic: str = (
-            f"irrigation/{station_id}/{irrigation_point.config.id}/sensor"
+            f"irrigation/{params.station_id}/{params.irrigation_point.config.id}/sensor"
         )
         self._publish_discovery_message()
 
@@ -87,28 +79,13 @@ class SensorMessager(BaseMessager):
 
 
 class ValveMessager(BaseMessager):
-    def __init__(
-        self,
-        mqtt_client: MQTTClient,
-        station_id: str,
-        irrigation_point: Any,
-        device_info: Dict[str, Any],
-        availability_topic: str,
-        logger: Logger,
-    ) -> None:
-        super().__init__(
-            mqtt_client,
-            station_id,
-            irrigation_point,
-            device_info,
-            availability_topic,
-            logger,
-        )
+    def __init__(self, params: MessagerParams) -> None:
+        super().__init__(params)
         self._state_topic: str = (
-            f"irrigation/{station_id}/{irrigation_point.config.id}/valve/state"
+            f"irrigation/{params.station_id}/{params.irrigation_point.config.id}/valve/state"
         )
         self._command_topic: str = (
-            f"irrigation/{station_id}/{irrigation_point.config.id}/valve/set"
+            f"irrigation/{params.station_id}/{params.irrigation_point.config.id}/valve/set"
         )
         self._publish_discovery_message()
         self.publish_valve_state()
