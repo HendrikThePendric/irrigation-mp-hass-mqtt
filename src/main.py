@@ -1,10 +1,11 @@
+from machine import reset
 from time import sleep
-from hass_messaging_service import HassMessagingService
+from hass_mqtt_client import HassMqttClient
 from irrigation_station import IrrigationStation
 from logger import Logger
 from config import Config
-from mqtt import HassMqttClient
 from time_keeper import TimeKeeper
+from wifi_connect import wifi_connect
 
 PRINT_LOGS = True
 
@@ -19,30 +20,25 @@ logger = Logger(PRINT_LOGS)
 time_keeper = TimeKeeper(logger)
 config = Config("./config.json")
 station = IrrigationStation(config, logger)
-hass_mqtt_client = HassMqttClient(config, logger)
 
 
 logger.log(str(config))
-hass_mqtt_client.wifi_connect()
+wifi_connect(config.network, logger)
 time_keeper.initialize_ntp_synchronization()
 logger.enable_timestamp_prefix(time_keeper.get_current_cet_datetime_str)
-mqtt_client = hass_mqtt_client.mqtt_connect()
-hass_messaging_service = HassMessagingService(config, mqtt_client, logger, station)
+
+hass_mqtt_client = HassMqttClient(config, logger, station)
 
 
 def main() -> None:
     try:
         while True:
-            mqtt_client.check_msg()
+            hass_mqtt_client.check_msg()
             time_keeper.handle_pending_ntp_sync()
-            hass_messaging_service.handle_pending_publish()
+            hass_mqtt_client.handle_pending_publish()
             sleep(1)
     except Exception as e:
-        import traceback
-
-        logger.log(f"Exception in main loop: {e}\n{traceback.format_exc()}")
-        from machine import reset
-
+        logger.log(f"Exception in main loop: {e}")
         reset()
 
 
