@@ -15,3 +15,6 @@ mkdir typings/umqtt
 curl -H 'Accept: application/vnd.github.v3.raw' -O -L \
   --output-dir typings/umqtt \
   https://api.github.com/repos/Josverl/micropython-stubs/contents/stubs/micropython-v1_25_0-frozen/esp32/GENERIC/umqtt/simple.pyi
+curl -H 'Accept: application/vnd.github.v3.raw' -O -L \
+  --output-dir typings/umqtt \
+  https://api.github.com/repos/Josverl/micropython-stubs/contents/stubs/micropython-v1_25_0-frozen/esp32/GENERIC/umqtt/robust.pyi

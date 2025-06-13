@@ -1,5 +1,5 @@
 from machine import Timer
-from umqtt.simple import MQTTClient
+from umqtt.robust import MQTTClient
 from config import Config
 from logger import Logger
 from irrigation_station import IrrigationStation
