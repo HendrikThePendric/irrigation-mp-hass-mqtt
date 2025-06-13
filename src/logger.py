@@ -7,7 +7,8 @@ LOG_FILE_PATH_OLD = "./log-old.txt"
 # Storage capicity is 4MB, 4194304 bytes
 # Max capacity dedicated to logging 25%
 # This is distributed over 2 files
-MAX_FILE_SIZE = int((4194304 * 0.25) / 2)
+# MAX_FILE_SIZE = int((4194304 * 0.25) / 2)
+MAX_FILE_SIZE = 1000
 
 
 def _return_empty_str() -> str:
