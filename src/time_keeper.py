@@ -66,10 +66,8 @@ class TimeKeeper:
             self._logger.log("NTP sync successful")
             self._schedule_normal_sync()
         except OSError:
-            import traceback
-
             self._logger.log(
-                f"NTP sync failed retrying again in {self._retry_interval // 1000}s\n{traceback.format_exc()}"
+                f"NTP sync failed retrying again in {self._retry_interval // 1000}s"
             )
             self._schedule_retry()
         self._pending_ntp_sync = False
@@ -94,11 +92,15 @@ class TimeKeeper:
         year = utc_time.year
         # Last Sunday of March
         march = datetime.date(year, 3, 31)
-        last_sunday_march = march - datetime.timedelta(days=march.weekday() + 1 if march.weekday() != 6 else 0)
+        last_sunday_march = march - datetime.timedelta(
+            days=march.weekday() + 1 if march.weekday() != 6 else 0
+        )
         dst_start = datetime.datetime.combine(last_sunday_march, datetime.time(1, 0))
         # Last Sunday of October
         october = datetime.date(year, 10, 31)
-        last_sunday_october = october - datetime.timedelta(days=october.weekday() + 1 if october.weekday() != 6 else 0)
+        last_sunday_october = october - datetime.timedelta(
+            days=october.weekday() + 1 if october.weekday() != 6 else 0
+        )
         dst_end = datetime.datetime.combine(last_sunday_october, datetime.time(1, 0))
         if dst_start <= utc_time < dst_end:
             return utc_time + datetime.timedelta(hours=2)

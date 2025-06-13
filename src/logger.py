@@ -60,8 +60,4 @@ class Logger:
                 if self._should_print:
                     print(msg)
         except OSError as e:
-            import traceback
-
-            print(
-                f"Log file rotation failed, will try again on next log: {e}\n{traceback.format_exc()}"
-            )
+            print(f"Log file rotation failed, will try again on next log: {e}")
