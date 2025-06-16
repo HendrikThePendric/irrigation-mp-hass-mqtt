@@ -16,7 +16,7 @@ KEY_PATH = "./irrigationbackyard_key.der"
 PORT = 8883
 KEEPALIVE = 60
 # PUBLISH_INTERVAL = 240_000  # milliseconds (4 minutes)
-PUBLISH_INTERVAL = 50000
+PUBLISH_INTERVAL = 60_000  # every minute
 
 
 def create_ssl_context() -> SSLContext:
