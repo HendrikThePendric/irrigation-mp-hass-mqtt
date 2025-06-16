@@ -6,7 +6,6 @@ from logger import Logger
 from irrigation_station import IrrigationPoint
 
 
-
 from collections import namedtuple
 
 MessagerParams = namedtuple(
@@ -18,11 +17,12 @@ MessagerParams = namedtuple(
         "device_info",
         "availability_topic",
         "logger",
-    ]
+    ],
 )
 
+
 class BaseMessager:
-    def __init__(self, params: 'MessagerParams') -> None:
+    def __init__(self, params: "MessagerParams") -> None:
         self._client: MQTTClient = params.mqtt_client
         self._station_id: str = params.station_id
         self._point: IrrigationPoint = params.irrigation_point
@@ -62,6 +62,7 @@ class SensorMessager(BaseMessager):
             "name": f"{self._point.config.name} Moisture",
             "unique_id": f"{self._point.config.id}_sensor",
             "device_class": "moisture",
+            "state_class": "measurement",
             "unit_of_measurement": "%",
             "state_topic": self._state_topic,
             "value_template": "{{ value_json.moisture }}",
@@ -81,12 +82,8 @@ class SensorMessager(BaseMessager):
 class ValveMessager(BaseMessager):
     def __init__(self, params: MessagerParams) -> None:
         super().__init__(params)
-        self._state_topic: str = (
-            f"irrigation/{params.station_id}/{params.irrigation_point.config.id}/valve/state"
-        )
-        self._command_topic: str = (
-            f"irrigation/{params.station_id}/{params.irrigation_point.config.id}/valve/set"
-        )
+        self._state_topic: str = f"irrigation/{params.station_id}/{params.irrigation_point.config.id}/valve/state"
+        self._command_topic: str = f"irrigation/{params.station_id}/{params.irrigation_point.config.id}/valve/set"
         self._publish_discovery_message()
         self.publish_valve_state()
 
@@ -112,7 +109,9 @@ class ValveMessager(BaseMessager):
         state = self._point.get_valve_state()
         # Only allow IrrigationPoint.STATE_OPEN or STATE_CLOSED for Home Assistant
         if state not in (IrrigationPoint.STATE_OPEN, IrrigationPoint.STATE_CLOSED):
-            raise ValueError(f"Valve state '{state}' is invalid. Must be '{IrrigationPoint.STATE_OPEN}' or '{IrrigationPoint.STATE_CLOSED}'")
+            raise ValueError(
+                f"Valve state '{state}' is invalid. Must be '{IrrigationPoint.STATE_OPEN}' or '{IrrigationPoint.STATE_CLOSED}'"
+            )
         self._client.publish(self._state_topic, state, retain=True)
         self._logger.log(f"{self._state_topic}::{state}")
 
