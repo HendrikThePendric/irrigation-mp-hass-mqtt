@@ -5,7 +5,7 @@ from irrigation_station import IrrigationStation
 from logger import Logger
 from config import Config
 from time_keeper import TimeKeeper
-from wifi_connect import wifi_connect
+from wifi_manager import WiFiManager
 
 PRINT_LOGS = True
 
@@ -20,14 +20,14 @@ logger = Logger(PRINT_LOGS)
 time_keeper = TimeKeeper(logger)
 config = Config("./config.json")
 station = IrrigationStation(config, logger)
-
+wifi_manager = WiFiManager(config.network, logger)
+hass_mqtt_client = HassMqttClient(config, logger, station)
 
 logger.log(str(config))
-wifi_connect(config.network, logger)
+wifi_manager.setup()
 time_keeper.initialize_ntp_synchronization()
 logger.enable_timestamp_prefix(time_keeper.get_current_cet_datetime_str)
-
-hass_mqtt_client = HassMqttClient(config, logger, station)
+hass_mqtt_client.setup()
 
 
 def main() -> None:

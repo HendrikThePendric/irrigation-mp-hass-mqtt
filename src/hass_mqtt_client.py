@@ -57,6 +57,7 @@ class HassMqttClient:
             ssl=create_ssl_context(),
         )
 
+    def setup(self) -> None:
         self._connect()
         self._client.set_callback(self._handle_message)
         self._set_online()

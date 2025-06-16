@@ -14,8 +14,8 @@ class TimeKeeper:
     ) -> None:
         self._rtc: RTC = RTC()
         self._sync_timer: Timer = Timer(-1)
-        self._sync_interval: int = sync_interval * 1000  # Convert to milliseconds
-        self._retry_interval: int = retry_interval * 1000
+        self._sync_interval_ms: int = sync_interval * 1000  # Already in milliseconds
+        self._retry_interval_ms: int = retry_interval * 1000
         self._logger: Logger = logger
         self._pending_ntp_sync = False
         ntptime.host = "nl.pool.ntp.org"
@@ -43,14 +43,14 @@ class TimeKeeper:
 
     def _schedule_normal_sync(self) -> None:
         self._sync_timer.init(
-            period=self._sync_interval,
+            period=self._sync_interval_ms,
             mode=Timer.ONE_SHOT,
             callback=self._set_pending_ntp_sync,
         )
 
     def _schedule_retry(self) -> None:
         self._sync_timer.init(
-            period=self._retry_interval,
+            period=self._retry_interval_ms,
             mode=Timer.ONE_SHOT,
             callback=self._set_pending_ntp_sync,
         )
@@ -67,7 +67,7 @@ class TimeKeeper:
             self._schedule_normal_sync()
         except OSError:
             self._logger.log(
-                f"NTP sync failed retrying again in {self._retry_interval // 1000}s"
+                f"NTP sync failed retrying again in {self._retry_interval_ms // 1000}s"
             )
             self._schedule_retry()
         self._pending_ntp_sync = False
