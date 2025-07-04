@@ -98,6 +98,7 @@ class ValveMessager(BaseMessager):
             "command_topic": self._command_topic,
             "payload_open": "open",
             "payload_close": "closed",
+            "optimistic": True,
             "availability_topic": self._availability_topic,
             "device": self._device_info,
             "device_class": "water",
