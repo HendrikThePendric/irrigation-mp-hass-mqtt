@@ -98,6 +98,8 @@ class ValveMessager(BaseMessager):
             "command_topic": self._command_topic,
             "payload_open": "open",
             "payload_close": "closed",
+            "state_open": "open",
+            "state_closed": "closed",
             "optimistic": True,
             "availability_topic": self._availability_topic,
             "device": self._device_info,
