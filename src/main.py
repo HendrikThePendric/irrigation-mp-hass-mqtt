@@ -33,6 +33,7 @@ hass_mqtt_client.setup()
 def main() -> None:
     try:
         while True:
+            wifi_manager.handle_pending_connection_check()
             hass_mqtt_client.check_msg()
             time_keeper.handle_pending_ntp_sync()
             hass_mqtt_client.handle_pending_publish()
