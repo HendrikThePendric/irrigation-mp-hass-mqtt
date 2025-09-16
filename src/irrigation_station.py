@@ -22,9 +22,9 @@ class IrrigationPoint:
         """Simulate and return the current soil moisture sensor value (0.0-1.0)."""
         conversion_factor = 1 / (65535)
         self._sensor_value = self._sensor.read_u16() * conversion_factor
-        self._logger.log(
-            f"[Sensor] {self.config.name}: Moisture level is {self._sensor_value * 100:.1f}%"
-        )
+        # self._logger.log(
+        #     f"[Sensor] {self.config.name}: Moisture level is {self._sensor_value * 100:.1f}%"
+        # )
         return self._sensor_value
 
     def open_valve(self) -> None:

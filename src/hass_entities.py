@@ -76,7 +76,7 @@ class SensorMessager(BaseMessager):
         value: float = self._point.get_sensor_value()
         payload: str = dumps({"moisture": round(value * 100, 2)})
         self._client.publish(self._state_topic, payload)
-        self._logger.log(f"{self._state_topic}::{payload}")
+        # self._logger.log(f"{self._state_topic}::{payload}")
 
 
 class ValveMessager(BaseMessager):
