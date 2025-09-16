@@ -176,3 +176,6 @@ cython_debug/
 config.json
 certs/
 .aider*
+
+log.txt
+log-old.txt
