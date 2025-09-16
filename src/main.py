@@ -1,4 +1,4 @@
-from machine import reset
+from machine import reset, Pin
 from time import sleep
 from hass_mqtt_client import HassMqttClient
 from irrigation_station import IrrigationStation
@@ -29,6 +29,9 @@ time_keeper.initialize_ntp_synchronization()
 logger.enable_timestamp_prefix(time_keeper.get_current_cet_datetime_str)
 hass_mqtt_client.setup()
 
+# Blink led for debugging
+onboard_led = Pin("LED", Pin.OUT)
+
 
 def main() -> None:
     try:
@@ -37,6 +40,7 @@ def main() -> None:
             hass_mqtt_client.check_msg()
             time_keeper.handle_pending_ntp_sync()
             hass_mqtt_client.handle_pending_publish()
+            onboard_led.toggle()
             sleep(1)
     except Exception as e:
         logger.log(f"Exception in main loop: {e}")
