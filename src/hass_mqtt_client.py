@@ -6,7 +6,7 @@ from irrigation_station import IrrigationStation
 from hass_entities import SensorMessager, ValveMessager, MessagerParams
 from machine import reset
 from ssl import SSLContext, PROTOCOL_TLS_CLIENT
-from time import sleep
+from time import sleep, ticks_ms
 
 MAX_RETRY_TIME = 30
 RETRY_DELAY = 2
@@ -17,6 +17,7 @@ PORT = 8883
 KEEPALIVE = 60
 # PUBLISH_INTERVAL = 240_000  # milliseconds (4 minutes)
 PUBLISH_INTERVAL = 60_000  # every minute
+CONNECTION_HEALTH_CHECK_INTERVAL = 300_000  # 5 minutes in milliseconds
 
 
 def create_ssl_context() -> SSLContext:
@@ -56,6 +57,7 @@ class HassMqttClient:
             keepalive=KEEPALIVE,
             ssl=create_ssl_context(),
         )
+        self._last_successful_operation = 0  # Track last successful MQTT operation
 
     def setup(self) -> None:
         self._connect()
@@ -63,18 +65,33 @@ class HassMqttClient:
         self._set_online()
         self._setup_entities()
         self._start_periodic_publish()
+        self._last_successful_operation = ticks_ms()  # Initialize timestamp
 
     def check_msg(self) -> None:
-        self._client.check_msg()
+        try:
+            self._client.check_msg()
+            self._last_successful_operation = ticks_ms()
+        except Exception as e:
+            self._logger.log(f"MQTT check_msg failed: {e}, restarting device")
+            reset()
 
     def handle_pending_publish(self) -> None:
         if not self._pending_publish:
             return
+        
+        # Check if connection is stale (no successful operations for 5 minutes)
+        current_time = ticks_ms()
+        if self._last_successful_operation > 0 and (current_time - self._last_successful_operation) > 300000:
+            self._logger.log("MQTT connection appears stale, restarting device")
+            reset()
+        
         for sensor_messager in self._sensor_messagers:
             try:
                 sensor_messager.publish_moisture_level()
+                self._last_successful_operation = current_time
             except Exception as e:
-                self._logger.log(f"Failed to publish sensor data: {e}")
+                self._logger.log(f"Failed to publish sensor data: {e}, restarting device")
+                reset()
         self._pending_publish = False
 
     def _connect(self) -> None:
