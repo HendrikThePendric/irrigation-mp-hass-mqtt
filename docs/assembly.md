@@ -33,6 +33,8 @@ To impove reading accuracy we use 2 external ADS1115 modules to read the sensor 
 3. Now connect ADS1115-1 and ADS1115-2 to the rails, the level shifter, and each other
     1. Both VDD's to the power rail
     2. Both GND's to the GND rail
+    3. ADS1115-1 ADDR to the GND rail
+    4. ADS1115-2 ADDR to the 5V rail
     3. ADS1115-1 SCL to HV2 *
     4. ADS1115-1 SDA to HV1 *
     5. ADS1115-1 SCL to ADS1115-2 SCL
