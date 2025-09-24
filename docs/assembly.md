@@ -74,7 +74,8 @@ To extend the lifespan of the sensors from days/week when continiously powered o
 5. Now we drag-solder these sets of three pins togehter:
      1. terminal 5V -> 10μF electrolytic capacitator positive leg -> 0.1μF ceramic capacitator leg
      2. terminal GND -> 10μF electrolytic capacitator negative leg -> 0.1μF ceramic capacitator leg
+6. Now connect the GND leg of the 0.1μF ceramic capacitator (5.2) to the GND rail
 6. After this we place the MOSFET, with its resistors:
     1. G (Gate): This is the control-pin, so connect to one of the PICO's GP0-20 pins via a 100Ω resistor. It should however also be connected to the GND rail, via a 10kΩ resistor
-    2. D (Drain): This is the output pin, so connect to the VCC of the terminal, or actually the leg of the 0.1μF ceramic capacitator which is connected to that.
-    3. S (Source): This is in input pin, so connect to the 5V power rail
+    2. D (Drain): This is the output pin, so connect it to the 5V power rail
+    3. S (Source): This is in input pin, so connect it to the VCC of the terminal, or actually the leg of the 0.1μF ceramic capacitator which is connected to that.
