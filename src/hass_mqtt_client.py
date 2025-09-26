@@ -4,6 +4,7 @@ from config import Config
 from logger import Logger
 from irrigation_station import IrrigationStation
 from hass_entities import SensorMessager, ValveMessager, MessagerParams
+from health_monitor import HealthMonitor
 from machine import reset
 from ssl import SSLContext, PROTOCOL_TLS_CLIENT
 from time import sleep, ticks_ms
@@ -58,6 +59,7 @@ class HassMqttClient:
             ssl=create_ssl_context(),
         )
         self._last_successful_operation = 0  # Track last successful MQTT operation
+        self._health_monitor = HealthMonitor(self._client, self._config.station_id, self._logger)
 
     def setup(self) -> None:
         self._connect()
@@ -65,6 +67,7 @@ class HassMqttClient:
         self._set_online()
         self._setup_entities()
         self._start_periodic_publish()
+        self._health_monitor.start_health_monitoring()
         self._last_successful_operation = ticks_ms()  # Initialize timestamp
 
     def check_msg(self) -> None:
@@ -76,6 +79,9 @@ class HassMqttClient:
             reset()
 
     def handle_pending_publish(self) -> None:
+        # Handle health monitor first
+        self._health_monitor.handle_pending_publish()
+        
         if not self._pending_publish:
             return
         
