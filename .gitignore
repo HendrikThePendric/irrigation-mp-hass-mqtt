@@ -177,8 +177,5 @@ config.json
 certs/
 .aider*
 
-# Test files
-test_*.py
-
 log.txt
 log-old.txt

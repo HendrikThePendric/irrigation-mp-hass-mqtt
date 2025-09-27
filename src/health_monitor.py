@@ -5,8 +5,8 @@ from logger import Logger
 
 # Health check interval in milliseconds (2 minutes)
 HEALTH_CHECK_INTERVAL = 120_000
-# Timeout for waiting for QoS1 publish to complete in milliseconds (30 seconds)
-HEALTH_PUBLISH_TIMEOUT = 30_000
+# Timeout for waiting for QoS1 acknowledgment in milliseconds (30 seconds)
+HEALTH_ACK_TIMEOUT = 30_000
 
 
 class HealthMonitor:
@@ -37,19 +37,26 @@ class HealthMonitor:
             
         current_time = ticks_ms()
         
+        # Check if previous health check timed out (no acknowledgment received)
+        if (self._last_health_check_time > 0 and 
+            (current_time - self._last_health_check_time) > HEALTH_ACK_TIMEOUT):
+            self._logger.log("Health check acknowledgment timeout, restarting device")
+            reset()
+        
         # Send health check message with QoS1
         try:
             health_payload = f"health_check_{current_time}"
             
-            # Publish with QoS1 - if this fails or times out, umqtt.robust should handle reconnection
-            # The key insight is that QoS1 will block until acknowledged or timeout
+            # Publish with QoS1 - this will block until PUBACK is received or timeout
+            # If the broker doesn't acknowledge within the socket timeout, this will raise an exception
             self._client.publish(self._health_topic, health_payload, qos=1)
             
+            # If we reach here, the QoS1 PUBACK was received successfully
             self._last_health_check_time = current_time
-            self._logger.log(f"Health check sent with QoS1: {health_payload}")
+            self._logger.log(f"Health check acknowledged: {health_payload}")
             
         except Exception as e:
-            self._logger.log(f"Health check failed: {e}, restarting device")
+            self._logger.log(f"Health check failed (no broker acknowledgment): {e}, restarting device")
             reset()
             
         self._pending_health_check = False
