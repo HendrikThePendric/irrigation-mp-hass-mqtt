@@ -10,21 +10,21 @@ class Sensor:
     
     def __init__(self, config: IrrigationPointConfig, logger: Logger) -> None:
         """Initialize the sensor with power control and ADC configuration."""
-        self.name = config.name
+        self._name = config.name
         self._mosfet = Pin(config.mosfet_pin, Pin.OUT) 
         self._ads_address = config.ads_address
         self._ads_channel = config.ads_channel
         self._logger = logger
-        self._sensor_value = 0.5
+        self._value = 0.5
         self._ads = None
         
         # Initialize I2C and ADS1115 for this sensor
         self._i2c = I2C(0, scl=Pin(1), sda=Pin(0), freq=400000)
         try:
             self._ads = ADS1115(self._i2c, address=self._ads_address)
-            self._logger.log(f"[ADS1115] Sensor {self.name}: Initialized module at address {hex(self._ads_address)}")
+            self._logger.log(f"[ADS1115] Sensor {self._name}: Initialized module at address {hex(self._ads_address)}")
         except Exception as e:
-            self._logger.log(f"[ADS1115] Sensor {self.name}: Failed to initialize module at address {hex(self._ads_address)}: {e}")
+            self._logger.log(f"[ADS1115] Sensor {self._name}: Failed to initialize module at address {hex(self._ads_address)}: {e}")
             raise
         
         # Ensure sensor is powered off initially
@@ -36,7 +36,7 @@ class Sensor:
         self._mosfet.value(1)
         
         # Wait for sensor to stabilize
-        sleep_ms(100)
+        sleep_ms(150)
         
         try:
             # Read from ADS1115
@@ -54,15 +54,15 @@ class Sensor:
             if not (0.0 <= normalized_value <= 1.0):
                 raise ValueError(f"Computed sensor value {normalized_value} is outside valid range [0.0, 1.0]")
             
-            self._sensor_value = normalized_value
+            self._value = normalized_value
             
         except Exception as e:
-            self._logger.log(f"[Sensor] {self.name}: Error reading sensor - {e}")
-            self._logger.log(f"[Sensor] {self.name}: Using last known value {self._sensor_value}")
+            self._logger.log(f"[Sensor] {self._name}: Error reading sensor - {e}")
+            self._logger.log(f"[Sensor] {self._name}: Using last known value {self._value}")
             # Keep the last known value on error
             
         finally:
             # Always power off the sensor
             self._mosfet.value(0)
         
-        return self._sensor_value
+        return self._value

@@ -11,7 +11,7 @@ class Valve:
     
     def __init__(self, config: IrrigationPointConfig, logger: Logger) -> None:
         """Initialize the valve with its GPIO pin configuration."""
-        self.name = config.name
+        self._name = config.name
         self._valve = Pin(config.valve_pin, Pin.OUT)
         self._pin = config.valve_pin
         self._state = Valve.STATE_CLOSED
@@ -24,15 +24,15 @@ class Valve:
         """Open the irrigation valve."""
         self._valve.value(1)
         self._state = Valve.STATE_OPEN
-        self._logger.log(f"[Valve] {self.name}: Valve opened, sent value 1 to pin {self._pin}")
+        self._logger.log(f"[Valve] {self._name}: Valve opened, sent value 1 to pin {self._pin}")
     
     def close(self) -> None:
         """Close the irrigation valve."""
         self._valve.value(0)
         self._state = Valve.STATE_CLOSED
-        self._logger.log(f"[Valve] {self.name}: Valve closed, sent value 0 to pin {self._pin}")
+        self._logger.log(f"[Valve] {self._name}: Valve closed, sent value 0 to pin {self._pin}")
     
     def get_state(self) -> str:
         """Return the current state (open/closed) of the valve."""
-        self._logger.log(f"[Valve] {self.name}: Valve state is {self._state}")
+        self._logger.log(f"[Valve] {self._name}: Valve state is {self._state}")
         return self._state
