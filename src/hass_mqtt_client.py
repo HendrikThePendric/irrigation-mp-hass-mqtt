@@ -2,7 +2,7 @@ from machine import Timer
 from umqtt.robust import MQTTClient
 from config import Config
 from logger import Logger
-from irrigation_station import IrrigationStation
+from station import IrrigationStation
 from hass_entities import SensorMessager, ValveMessager, MessagerParams
 from health_monitor import HealthMonitor
 from machine import reset

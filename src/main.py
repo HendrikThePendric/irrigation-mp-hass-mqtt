@@ -1,7 +1,7 @@
 from machine import reset, Pin
 from time import sleep
 from hass_mqtt_client import HassMqttClient
-from irrigation_station import IrrigationStation
+from station import IrrigationStation
 from logger import Logger
 from config import Config
 from time_keeper import TimeKeeper
