@@ -28,6 +28,7 @@ wifi_manager.setup()
 time_keeper.initialize_ntp_synchronization()
 logger.enable_timestamp_prefix(time_keeper.get_current_cet_datetime_str)
 hass_mqtt_client.setup()
+station.start_sensor_readings()  # Start periodic sensor readings
 
 # Blink led for debugging
 onboard_led = Pin("LED", Pin.OUT)
@@ -39,6 +40,7 @@ def main() -> None:
             wifi_manager.handle_pending_connection_check()
             hass_mqtt_client.check_msg()
             time_keeper.handle_pending_ntp_sync()
+            station.handle_pending_sensor_readings()  # Handle pending sensor readings
             hass_mqtt_client.handle_pending_publish()
             onboard_led.toggle()
             sleep(1)
