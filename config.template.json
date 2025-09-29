@@ -9,12 +9,16 @@
     {
       "name": "Location A",
       "valve_pin": 1,
-      "sensor_pin": 2
+      "mosfet_pin": 2,
+      "ads_address": 72,
+      "ads_channel": 0
     },
     {
       "name": "Location B",
       "valve_pin": 3,
-      "sensor_pin": 4
+      "mosfet_pin": 4,
+      "ads_address": 73,
+      "ads_channel": 1
     }
   ]
 }

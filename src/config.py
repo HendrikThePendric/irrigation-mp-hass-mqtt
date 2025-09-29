@@ -46,7 +46,9 @@ class IrrigationPointConfig:
     def __init__(self, conf: dict) -> None:
         self.name: str = get_if_valid("name", conf, str)
         self.valve_pin: int = get_if_valid("valve_pin", conf, int)
-        self.sensor_pin: int = get_if_valid("sensor_pin", conf, int)
+        self.mosfet_pin: int = get_if_valid("mosfet_pin", conf, int)
+        self.ads_address: int = get_if_valid("ads_address", conf, int)
+        self.ads_channel: int = get_if_valid("ads_channel", conf, int)
         self.id: str = _clean_string(self.name)
 
 
@@ -84,6 +86,8 @@ class Config:
             lines.append(f"  id:             {ip.id}")
             lines.append(f"    name:         {ip.name}")
             lines.append(f"    valve_pin:    {str(ip.valve_pin)}")
-            lines.append(f"    sensor_pin:   {str(ip.sensor_pin)}")
+            lines.append(f"    mosfet_pin:   {str(ip.mosfet_pin)}")
+            lines.append(f"    ads_address:  {hex(ip.ads_address)}")
+            lines.append(f"    ads_channel:  {str(ip.ads_channel)}")
 
         return "\n".join(lines)
