@@ -8,15 +8,15 @@
   "irrigation_points": [
     {
       "name": "Location A",
-      "valve_pin": 1,
-      "mosfet_pin": 2,
+      "valve_pin": 2,
+      "mosfet_pin": 21,
       "ads_address": 72,
       "ads_channel": 0
     },
     {
       "name": "Location B",
       "valve_pin": 3,
-      "mosfet_pin": 4,
+      "mosfet_pin": 22,
       "ads_address": 73,
       "ads_channel": 1
     }
