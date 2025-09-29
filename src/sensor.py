@@ -39,16 +39,9 @@ class Sensor:
         sleep_ms(150)
         
         try:
-            # Read from ADS1115
-            raw_value = self._ads.read(self._ads_channel)
-            
-            # Convert to 0.0-1.0 range (ADS1115 is 16-bit signed: -32768 to 32767)
-            # For single-ended measurement, we expect values in the range 0 to 32767
-            if raw_value < 0:
-                raise ValueError(f"Unexpected negative ADC reading: {raw_value}")
-            
-            # Calculate normalized value
-            normalized_value = raw_value / 32767.0
+            # Read from ADS1115 and convert to 0.0-1.0 range 
+            # (ADS1115 is 16-bit signed: -32768 to 32767, single-ended: 0 to 32767)
+            normalized_value = self._ads.read(self._ads_channel) / 32767.0
             
             # Validate the computed value is in expected range
             if not (0.0 <= normalized_value <= 1.0):
