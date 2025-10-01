@@ -1,3 +1,5 @@
 {
+  "stubPath": "./typings",
+  "extraPaths": ["."],
   "reportMissingModuleSource": "none"
 }

@@ -17,7 +17,8 @@ eggs/
 lib/
 lib64/
 parts/
-typings/
+typings/*
+!typings/ads1x15.pyi
 sdist/
 var/
 wheels/
