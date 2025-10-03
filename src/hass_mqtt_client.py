@@ -39,6 +39,7 @@ class HassMqttClient:
         self._station = station
         self._timer = Timer(-1)
         self._pending_publish = False
+        self._pending_reconnect = False
         self._sensor_messagers = []
         self._valve_messagers = []
         self._command_topic_to_valve = {}
@@ -57,9 +58,7 @@ class HassMqttClient:
             keepalive=KEEPALIVE,
             ssl=create_ssl_context(),
             logger=self._logger,
-            connect_callback=self._reconnect_callback,
-            max_retry_time=MAX_RETRY_TIME,
-            retry_delay=RETRY_DELAY
+            on_reconnect_callback=self._on_reconnect_callback
         )
         self._health_monitor = HealthMonitor(self._client, self._config.station_id, self._logger)
 
@@ -79,12 +78,37 @@ class HassMqttClient:
         # Handle health monitor first
         self._health_monitor.handle_pending_publish()
         
-        if not self._pending_publish:
-            return
+        # Handle pending reconnection (heavy work in main thread)
+        if self._pending_reconnect:
+            self._handle_pending_reconnect()
+            self._pending_reconnect = False
         
-        for sensor_messager in self._sensor_messagers:
-            sensor_messager.publish_moisture_level()
-        self._pending_publish = False
+        if self._pending_publish:
+            for sensor_messager in self._sensor_messagers:
+                sensor_messager.publish_moisture_level()
+            self._pending_publish = False
+
+    def _handle_pending_reconnect(self) -> None:
+        """Handle reconnection tasks in main thread - heavy work allowed here"""
+        self._logger.log("Reconnected to MQTT - restoring availability and subscriptions")
+        
+        # 1. Set device online
+        self._set_online()
+        
+        # 2. Re-subscribe to all valve command topics
+        for valve_messager in self._valve_messagers:
+            try:
+                valve_messager.subscribe_to_command_topic()
+                self._logger.log(f"Re-subscribed to {valve_messager._command_topic}")
+            except Exception as e:
+                self._logger.log(f"Failed to re-subscribe to {valve_messager._command_topic}: {e}")
+        
+        # 3. Re-subscribe to Home Assistant status
+        try:
+            self._client.subscribe("homeassistant/status", qos=0)
+            self._logger.log("Re-subscribed to Home Assistant status messages")
+        except Exception as e:
+            self._logger.log(f"Failed to re-subscribe to HA status: {e}")
 
     def _connect(self) -> None:
         self._client.connect(
@@ -111,27 +135,9 @@ class HassMqttClient:
         except Exception as e:
             self._logger.log(f"Failed to publish LWT online message: {e}")
 
-    def _reconnect_callback(self) -> None:
-        """Comprehensive reconnection setup - restore availability and subscriptions"""
-        self._logger.log("Reconnected to MQTT - restoring availability and subscriptions")
-        
-        # 1. Set device online
-        self._set_online()
-        
-        # 2. Re-subscribe to all valve command topics
-        for valve_messager in self._valve_messagers:
-            try:
-                valve_messager.subscribe_to_command_topic()
-                self._logger.log(f"Re-subscribed to {valve_messager._command_topic}")
-            except Exception as e:
-                self._logger.log(f"Failed to re-subscribe to {valve_messager._command_topic}: {e}")
-        
-        # 3. Re-subscribe to Home Assistant status
-        try:
-            self._client.subscribe("homeassistant/status", qos=0)
-            self._logger.log("Re-subscribed to Home Assistant status messages")
-        except Exception as e:
-            self._logger.log(f"Failed to re-subscribe to HA status: {e}")
+    def _on_reconnect_callback(self) -> None:
+        """Light callback that only toggles boolean flag - called from interrupt context"""
+        self._pending_reconnect = True
 
     def _setup_entities(self) -> None:
         for _, point in self._config.irrigation_points.items():

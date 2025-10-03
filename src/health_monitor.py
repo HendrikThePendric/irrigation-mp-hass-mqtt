@@ -1,7 +1,7 @@
 from machine import Timer, reset
 from time import ticks_ms
-from umqtt.simple import MQTTClient
 from logger import Logger
+from mqtt_robust_client import MQTTRobustClient
 
 # Health check interval in milliseconds (2 minutes)
 HEALTH_CHECK_INTERVAL = 120_000
@@ -11,7 +11,7 @@ HEALTH_CHECK_INTERVAL = 120_000
 class HealthMonitor:
     """Monitors MQTT connection health by sending periodic QoS1 messages."""
     
-    def __init__(self, mqtt_client: MQTTClient, station_id: str, logger: Logger) -> None:
+    def __init__(self, mqtt_client: MQTTRobustClient, station_id: str, logger: Logger) -> None:
         self._client = mqtt_client
         self._logger = logger
         self._station_id = station_id
@@ -39,15 +39,17 @@ class HealthMonitor:
         try:
             health_payload = f"health_check_{current_time}"
             
-            # Publish with QoS1 - this will block until PUBACK is received or socket timeout
-            # If the broker doesn't acknowledge within the socket timeout, this will raise an exception
-            self._client.publish(self._health_topic, health_payload, qos=1)
+            # Publish with specialized health check method - QoS1 with 3 attempts and simple reconnect
+            # This will raise exception if no PUBACK after 3 attempts with reconnection retries
+            self._client.publish_health_message(self._health_topic, health_payload)
             
             # If we reach here, the QoS1 PUBACK was received successfully
             self._logger.log(f"Health check acknowledged: {health_payload}")
             
-        except Exception as e:
-            self._logger.log(f"Health check failed (no broker acknowledgment): {e}, restarting device")
+        except OSError as e:
+            # Network error during publish - will be raised by publish_health_message() after retry attempts
+            self._logger.log(f"Health check failed after all retries: {e}")
+            self._logger.log("Resetting device for recovery...")
             reset()
             
         self._pending_health_check = False

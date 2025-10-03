@@ -3,121 +3,107 @@ from machine import reset
 from time import sleep
 from logger import Logger
 
-MAX_RETRIES = 5
-MAX_RECONNECTS = 5
-
 
 class MQTTRobustClient(MQTTClient):
-    """MQTT Client with retry/reconnect/restart pattern"""
+    """MQTT Client based on umqtt.robust with threading-safe callback pattern"""
     
+    DELAY = 2
+    DEBUG = False
+    HEALTH_CHECK_QOS = 1
+    HEALTH_CHECK_ATTEMPTS = 10
+
     def __init__(self, client_id, server, port=0, user=None, password=None, 
-                 keepalive=0, ssl=None, ssl_params={}, logger=None, connect_callback=None,
-                 max_retry_time=30, retry_delay=2):
+                 keepalive=0, ssl=None, ssl_params={}, logger=None, on_reconnect_callback=None):
         super().__init__(client_id, server, port, user, password, keepalive, ssl, ssl_params)
         self._logger = logger
-        self._connect_callback = connect_callback  # Callback to handle reconnection setup
-        self._max_retry_time = max_retry_time
-        self._retry_delay = retry_delay
-        
-    def publish(self, topic, msg, retain=False, qos=0):
-        """Publish with retry/reconnect/restart pattern"""
-        def _do_publish():
-            return super(MQTTRobustClient, self).publish(topic, msg, retain, qos)
-        return self._with_retry_pattern(_do_publish, f"publish to {topic} (QoS{qos})")
-    
-    def subscribe(self, topic, qos=0):
-        """Subscribe with retry/reconnect/restart pattern"""
-        def _do_subscribe():
-            return super(MQTTRobustClient, self).subscribe(topic, qos)
-        return self._with_retry_pattern(_do_subscribe, f"subscribe to {topic}")
-        
-    def check_msg(self):
-        """Check messages with retry/reconnect/restart pattern"""
-        def _do_check_msg():
-            return super(MQTTRobustClient, self).check_msg()
-        return self._with_retry_pattern(_do_check_msg, "check_msg")
-    
-    def connect(self, clean_session=True, timeout=None, lwt_topic=None, lwt_msg=None, lwt_retain=False, lwt_qos=0):
-        """Connect with retry logic"""
-        retry_time = 0
-        connected = False
-        
-        while not connected and retry_time <= self._max_retry_time:
+        self._on_reconnect_callback = on_reconnect_callback
+
+    def delay(self, i):
+        sleep(self.DELAY)
+
+    def log(self, in_reconnect, e):
+        if self._logger:
+            if in_reconnect:
+                self._logger.log(f"mqtt reconnect: {e}")
+            else:
+                self._logger.log(f"mqtt: {e}")
+
+    def reconnect(self):
+        i = 0
+        while 1:
             try:
-                if lwt_topic:
-                    self.set_last_will(lwt_topic, lwt_msg, lwt_retain, lwt_qos)
-                super().connect(clean_session, timeout)
-                connected = True
+                result = super().connect(False)  # clean_session=False like umqtt.robust
+                # Call callback to toggle boolean flag (light work only)
+                if self._on_reconnect_callback:
+                    self._on_reconnect_callback()
+                return result
             except OSError as e:
-                sleep(self._retry_delay)
-                retry_time += self._retry_delay
-                if self._logger:
-                    self._logger.log(f"Trying to connect to MQTT Broker ({retry_time}s)")
+                # Log on first attempt and then every 5 attempts
+                if i == 0 or i % 5 == 0:
+                    self.log(True, e)
+                i += 1
+                self.delay(i)
 
-        if not connected:
-            if self._logger:
-                self._logger.log("Connection to MQTT Broker failed, going to reset")
-            reset()
+    def publish(self, topic, msg, retain=False, qos=0):
+        """Publish with infinite retry like umqtt.robust"""
+        while 1:
+            try:
+                return super().publish(topic, msg, retain, qos)
+            except OSError as e:
+                self.log(False, e)
+            self.reconnect()
 
-        return connected
-    
-    def _with_retry_pattern(self, operation, operation_name):
-        """Execute operation with layered retry/reconnect/restart pattern"""
+    def publish_health_message(self, topic, msg):
+        """Specialized health check publish with simple reconnect and finite attempts"""
+        for attempt in range(self.HEALTH_CHECK_ATTEMPTS):
+            try:
+                return super().publish(topic, msg, False, self.HEALTH_CHECK_QOS)
+            except OSError as e:
+                self.log(False, e)
+                if attempt < self.HEALTH_CHECK_ATTEMPTS - 1:  # Not last attempt
+                    try:
+                        super().connect(False)  # Simple reconnect, no callback
+                    except OSError:
+                        continue  # Try next attempt
+        raise OSError("Health check publish failed after all attempts")
+
+    def wait_msg(self):
+        """Wait for message with infinite retry like umqtt.robust"""
+        while 1:
+            try:
+                return super().wait_msg()
+            except OSError as e:
+                self.log(False, e)
+            self.reconnect()
+
+    def check_msg(self, attempts=2):
+        """Check messages like umqtt.robust - limited attempts"""
+        while attempts:
+            self.sock.setblocking(False)
+            try:
+                return super().wait_msg()
+            except OSError as e:
+                self.log(False, e)
+            self.reconnect()
+            attempts -= 1
+
+    def connect(self, clean_session=True, timeout=None, lwt_topic=None, lwt_msg=None, lwt_retain=False, lwt_qos=0, max_retry_time=30):
+        """Connect with LWT support and finite retry"""
+        if lwt_topic:
+            self.set_last_will(lwt_topic, lwt_msg, lwt_retain, lwt_qos)
         
-        # Layer 1: Simple retries without reconnection
-        for attempt in range(MAX_RETRIES):
+        retry_time = 0
+        i = 1
+        while retry_time <= max_retry_time:
             try:
-                return operation()
-            except Exception as e:
-                if attempt < MAX_RETRIES - 1:
-                    if self._logger:
-                        self._logger.log(f"MQTT {operation_name} failed (attempt {attempt + 1}/{MAX_RETRIES}): {e}, retrying...")
-                    sleep(1)  # Brief delay before retry
-                else:
-                    if self._logger:
-                        self._logger.log(f"MQTT {operation_name} failed after {MAX_RETRIES} simple retries, trying with reconnection")
+                return super().connect(clean_session, timeout)
+            except OSError as e:
+                self.log(True, e)
+                self.delay(i)
+                retry_time += i * self.DELAY
+                i += 1
         
-        # Layer 2: Retry with reconnection
-        for reconnect_attempt in range(MAX_RECONNECTS):
-            if self._logger:
-                self._logger.log(f"MQTT {operation_name} reconnect attempt {reconnect_attempt + 1}/{MAX_RECONNECTS}")
-            
-            self._reconnect()
-            sleep(1)  # Brief delay after reconnect
-            
-            try:
-                return operation()
-            except Exception as e:
-                if reconnect_attempt < MAX_RECONNECTS - 1:
-                    if self._logger:
-                        self._logger.log(f"MQTT {operation_name} failed after reconnect (attempt {reconnect_attempt + 1}/{MAX_RECONNECTS}): {e}")
-                else:
-                    if self._logger:
-                        self._logger.log(f"MQTT {operation_name} failed after {MAX_RETRIES} retries and {MAX_RECONNECTS} reconnects: {e}, restarting device")
-                    reset()
-    
-    def _reconnect(self):
-        """Reconnect to MQTT broker"""
-        try:
-            # Don't explicitly disconnect - just reconnect directly
-            # This might be more transparent to HASS
-            try:
-                # Simple reconnect without retries (we're already in retry logic)
-                super().connect()
-            except Exception as e:
-                # If direct reconnect fails, try explicit disconnect first
-                try:
-                    self.disconnect()
-                except:
-                    pass  # Ignore disconnect errors
-                super().connect()
-            
-            # Call callback for post-connection setup (like availability publishing)
-            if self._connect_callback:
-                self._connect_callback()
-        except Exception as e:
-            # Don't re-raise - let the retry logic handle the failure
-            # The next attempt will try the operation again
-            if self._logger:
-                self._logger.log(f"Reconnection failed: {e}")
-            # Return normally - reconnection failed but let retry logic continue
+        # If we get here, connection failed completely
+        if self._logger:
+            self._logger.log("Connection to MQTT Broker failed, going to reset")
+        reset()
