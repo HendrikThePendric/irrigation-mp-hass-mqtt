@@ -1,10 +1,11 @@
 from machine import Timer, reset
 from time import ticks_ms
-from umqtt.robust import MQTTClient
+from umqtt.simple import MQTTClient
 from logger import Logger
 
 # Health check interval in milliseconds (2 minutes)
 HEALTH_CHECK_INTERVAL = 120_000
+# HEALTH_CHECK_INTERVAL = 5_000 # 5 seconds
 
 
 class HealthMonitor:
