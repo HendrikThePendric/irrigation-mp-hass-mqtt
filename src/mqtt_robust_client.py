@@ -3,7 +3,8 @@ from machine import reset
 from time import sleep
 from logger import Logger
 
-MAX_RETRIES = 10
+MAX_RETRIES = 5
+MAX_RECONNECTS = 5
 
 
 class MQTTRobustClient(MQTTClient):
@@ -61,20 +62,38 @@ class MQTTRobustClient(MQTTClient):
         return connected
     
     def _with_retry_pattern(self, operation, operation_name):
-        """Execute operation with retry/reconnect/restart pattern"""
+        """Execute operation with layered retry/reconnect/restart pattern"""
         
+        # Layer 1: Simple retries without reconnection
         for attempt in range(MAX_RETRIES):
             try:
                 return operation()
             except Exception as e:
                 if attempt < MAX_RETRIES - 1:
                     if self._logger:
-                        self._logger.log(f"MQTT {operation_name} failed (attempt {attempt + 1}/{MAX_RETRIES}): {e}, attempting reconnect")
-                    self._reconnect()
+                        self._logger.log(f"MQTT {operation_name} failed (attempt {attempt + 1}/{MAX_RETRIES}): {e}, retrying...")
                     sleep(1)  # Brief delay before retry
                 else:
                     if self._logger:
-                        self._logger.log(f"MQTT {operation_name} failed after {MAX_RETRIES} attempts: {e}, restarting device")
+                        self._logger.log(f"MQTT {operation_name} failed after {MAX_RETRIES} simple retries, trying with reconnection")
+        
+        # Layer 2: Retry with reconnection
+        for reconnect_attempt in range(MAX_RECONNECTS):
+            if self._logger:
+                self._logger.log(f"MQTT {operation_name} reconnect attempt {reconnect_attempt + 1}/{MAX_RECONNECTS}")
+            
+            self._reconnect()
+            sleep(1)  # Brief delay after reconnect
+            
+            try:
+                return operation()
+            except Exception as e:
+                if reconnect_attempt < MAX_RECONNECTS - 1:
+                    if self._logger:
+                        self._logger.log(f"MQTT {operation_name} failed after reconnect (attempt {reconnect_attempt + 1}/{MAX_RECONNECTS}): {e}")
+                else:
+                    if self._logger:
+                        self._logger.log(f"MQTT {operation_name} failed after {MAX_RETRIES} retries and {MAX_RECONNECTS} reconnects: {e}, restarting device")
                     reset()
     
     def _reconnect(self):
