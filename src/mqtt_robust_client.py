@@ -4,13 +4,12 @@ from time import sleep
 from logger import Logger
 
 
-class MQTTRobustClient(MQTTClient):
+class MqttRobustClient(MQTTClient):
     """MQTT Client based on umqtt.robust with threading-safe callback pattern"""
     
     DELAY = 2
     DEBUG = False
-    HEALTH_CHECK_QOS = 1
-    HEALTH_CHECK_ATTEMPTS = 10
+    MAX_RECONNECT_TIME = 600  # 10 minutes in seconds
 
     def __init__(self, client_id, server, port=0, user=None, password=None, 
                  keepalive=0, ssl=None, ssl_params={}, logger=None, on_reconnect_callback=None):
@@ -30,7 +29,8 @@ class MQTTRobustClient(MQTTClient):
 
     def reconnect(self):
         i = 0
-        while 1:
+        retry_time = 0
+        while retry_time <= self.MAX_RECONNECT_TIME:
             try:
                 result = super().connect(False)  # clean_session=False like umqtt.robust
                 # Call callback to toggle boolean flag (light work only)
@@ -43,9 +43,15 @@ class MQTTRobustClient(MQTTClient):
                     self.log(True, e)
                 i += 1
                 self.delay(i)
+                retry_time += self.DELAY
+        
+        # 10 minutes of reconnect attempts failed - reset device
+        if self._logger:
+            self._logger.log("MQTT reconnect failed after 10 minutes of retries, resetting device")
+        reset()
 
     def publish(self, topic, msg, retain=False, qos=0):
-        """Publish with infinite retry like umqtt.robust"""
+        """Publish with retry and reconnect until reconnect timeout expires"""
         while 1:
             try:
                 return super().publish(topic, msg, retain, qos)
@@ -53,22 +59,10 @@ class MQTTRobustClient(MQTTClient):
                 self.log(False, e)
             self.reconnect()
 
-    def publish_health_message(self, topic, msg):
-        """Specialized health check publish with simple reconnect and finite attempts"""
-        for attempt in range(self.HEALTH_CHECK_ATTEMPTS):
-            try:
-                return super().publish(topic, msg, False, self.HEALTH_CHECK_QOS)
-            except OSError as e:
-                self.log(False, e)
-                if attempt < self.HEALTH_CHECK_ATTEMPTS - 1:  # Not last attempt
-                    try:
-                        super().connect(False)  # Simple reconnect, no callback
-                    except OSError:
-                        continue  # Try next attempt
-        raise OSError("Health check publish failed after all attempts")
+
 
     def wait_msg(self):
-        """Wait for message with infinite retry like umqtt.robust"""
+        """Wait for message with retry and reconnect until reconnect timeout expires"""
         while 1:
             try:
                 return super().wait_msg()
