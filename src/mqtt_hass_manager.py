@@ -89,22 +89,8 @@ class MqttHassManager:
             self._pending_publish = False
 
     def _handle_pending_reconnect(self) -> None:
-        self._logger.log("Reconnected to MQTT - restoring availability and subscriptions")
-        
+        self._logger.log("Reconnected to MQTT - restoring availability")
         self._set_online()
-        
-        for valve_messager in self._valve_messagers:
-            try:
-                valve_messager.subscribe_to_command_topic()
-                self._logger.log(f"Re-subscribed to {valve_messager._command_topic}")
-            except Exception as e:
-                self._logger.log(f"Failed to re-subscribe to {valve_messager._command_topic}: {e}")
-        
-        try:
-            self._client.subscribe("homeassistant/status", qos=0)
-            self._logger.log("Re-subscribed to Home Assistant status messages")
-        except Exception as e:
-            self._logger.log(f"Failed to re-subscribe to HA status: {e}")
 
     def _handle_pending_broker_connectivity_test(self) -> None:
         current_time = ticks_ms()
