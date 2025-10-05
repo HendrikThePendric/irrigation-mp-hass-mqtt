@@ -21,7 +21,7 @@ MessagerParams = namedtuple(
 )
 
 
-class BaseMessager:
+class MqttHassEntity:
     def __init__(self, params: "MessagerParams") -> None:
         self._client: MQTTClient = params.mqtt_client
         self._station_id: str = params.station_id
@@ -46,7 +46,7 @@ class BaseMessager:
         self._logger.log("\n".join(lines))
 
 
-class SensorMessager(BaseMessager):
+class MqttHassSensor(MqttHassEntity):
     def __init__(self, params: MessagerParams) -> None:
         super().__init__(params)
         self._state_topic: str = (
@@ -81,7 +81,7 @@ class SensorMessager(BaseMessager):
         self._logger.log(f"{self._state_topic}::{payload}")
 
 
-class ValveMessager(BaseMessager):
+class MqttHassValve(MqttHassEntity):
     def __init__(self, params: MessagerParams) -> None:
         super().__init__(params)
         self._state_topic: str = f"irrigation/{params.station_id}/{params.irrigation_point.config.id}/valve/state"

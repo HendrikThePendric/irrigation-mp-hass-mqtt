@@ -1,6 +1,6 @@
 from machine import reset, Pin
 from time import sleep
-from hass_mqtt_client import HassMqttClient
+from mqtt_hass_manager import MqttHassManager
 from irrigation_station import IrrigationStation
 from logger import Logger
 from config import Config
@@ -21,13 +21,13 @@ time_keeper = TimeKeeper(logger)
 config = Config("./config.json")
 station = IrrigationStation(config, logger)
 wifi_manager = WiFiManager(config.network, logger)
-hass_mqtt_client = HassMqttClient(config, logger, station)
+mqtt_manager = MqttHassManager(config, logger, station)
 
 logger.log(str(config))
 wifi_manager.setup()
 time_keeper.initialize_ntp_synchronization()
 logger.enable_timestamp_prefix(time_keeper.get_current_cet_datetime_str)
-hass_mqtt_client.setup()
+mqtt_manager.setup()
 
 # Blink led for debugging
 onboard_led = Pin("LED", Pin.OUT)
@@ -37,9 +37,9 @@ def main() -> None:
     try:
         while True:
             wifi_manager.handle_pending_connection_check()
-            hass_mqtt_client.check_msg()
+            mqtt_manager.check_msg()
             time_keeper.handle_pending_ntp_sync()
-            hass_mqtt_client.handle_pending_publish()
+            mqtt_manager.handle_pending_messages()
             onboard_led.toggle()
             sleep(1)
     except Exception as e:

@@ -1,11 +1,9 @@
 from machine import Timer
-from mqtt_robust_client import MQTTRobustClient
+from mqtt_robust_client import MqttRobustClient
 from config import Config
 from logger import Logger
 from irrigation_station import IrrigationStation
-from hass_entities import SensorMessager, ValveMessager, MessagerParams
-from health_monitor import HealthMonitor
-from machine import reset
+from mqtt_hass_entities import MqttHassSensor, MqttHassValve, MessagerParams
 from ssl import SSLContext, PROTOCOL_TLS_CLIENT
 from time import sleep, ticks_ms
 
@@ -16,8 +14,8 @@ CERT_PATH = "./irrigationbackyard_crt.der"
 KEY_PATH = "./irrigationbackyard_key.der"
 PORT = 8883
 KEEPALIVE = 60
-PUBLISH_INTERVAL = 240_000  # milliseconds (4 minutes)
-# PUBLISH_INTERVAL = 10_000  # milliseconds (10 seconds)
+PUBLISH_INTERVAL = 240_000
+BROKER_CONNECTIVITY_TEST_INTERVAL = 1800000
 
 
 def create_ssl_context() -> SSLContext:
@@ -27,7 +25,7 @@ def create_ssl_context() -> SSLContext:
     return ssl_context
 
 
-class HassMqttClient:
+class MqttHassManager:
     def __init__(
         self,
         config: Config,
@@ -38,12 +36,15 @@ class HassMqttClient:
         self._logger = logger
         self._station = station
         self._timer = Timer(-1)
+        self._broker_connectivity_timer = Timer(-1)
         self._pending_publish = False
         self._pending_reconnect = False
+        self._pending_broker_connectivity_test = False
+        self._availability_topic = f"irrigation/{self._config.station_id}/availability"
+        self._broker_connectivity_topic = f"irrigation/{self._config.station_id}/broker_connectivity"
         self._sensor_messagers = []
         self._valve_messagers = []
         self._command_topic_to_valve = {}
-        self._availability_topic = f"irrigation/{self._config.station_id}/availability"
         self._device_info = {
             "identifiers": [self._config.station_id],
             "name": self._config.station_name,
@@ -51,7 +52,7 @@ class HassMqttClient:
             "model": "Raspberry Pi Pico 2 W",
             "sw_version": "0.1",
         }
-        self._client = MQTTRobustClient(
+        self._client = MqttRobustClient(
             client_id=self._config.station_mqtt_id,
             server=self._config.network.mqtt_broker_ip,
             port=PORT,
@@ -60,7 +61,6 @@ class HassMqttClient:
             logger=self._logger,
             on_reconnect_callback=self._on_reconnect_callback
         )
-        self._health_monitor = HealthMonitor(self._client, self._config.station_id, self._logger)
 
     def setup(self) -> None:
         self._connect()
@@ -69,16 +69,16 @@ class HassMqttClient:
         self._setup_entities()
         self._monitor_hass_status()
         self._start_periodic_publish()
-        self._health_monitor.start_health_monitoring()
+        self._start_broker_connectivity_monitoring()
 
     def check_msg(self) -> None:
         self._client.check_msg()
 
-    def handle_pending_publish(self) -> None:
-        # Handle health monitor first
-        self._health_monitor.handle_pending_publish()
+    def handle_pending_messages(self) -> None:
+        if self._pending_broker_connectivity_test:
+            self._handle_pending_broker_connectivity_test()
+            self._pending_broker_connectivity_test = False
         
-        # Handle pending reconnection (heavy work in main thread)
         if self._pending_reconnect:
             self._handle_pending_reconnect()
             self._pending_reconnect = False
@@ -89,13 +89,10 @@ class HassMqttClient:
             self._pending_publish = False
 
     def _handle_pending_reconnect(self) -> None:
-        """Handle reconnection tasks in main thread - heavy work allowed here"""
         self._logger.log("Reconnected to MQTT - restoring availability and subscriptions")
         
-        # 1. Set device online
         self._set_online()
         
-        # 2. Re-subscribe to all valve command topics
         for valve_messager in self._valve_messagers:
             try:
                 valve_messager.subscribe_to_command_topic()
@@ -103,12 +100,18 @@ class HassMqttClient:
             except Exception as e:
                 self._logger.log(f"Failed to re-subscribe to {valve_messager._command_topic}: {e}")
         
-        # 3. Re-subscribe to Home Assistant status
         try:
             self._client.subscribe("homeassistant/status", qos=0)
             self._logger.log("Re-subscribed to Home Assistant status messages")
         except Exception as e:
             self._logger.log(f"Failed to re-subscribe to HA status: {e}")
+
+    def _handle_pending_broker_connectivity_test(self) -> None:
+        current_time = ticks_ms()
+        test_payload = f"broker_connectivity_test_{current_time}"
+        
+        self._client.publish(self._broker_connectivity_topic, test_payload, qos=1)
+        self._logger.log(f"Broker connectivity test acknowledged: {test_payload}")
 
     def _connect(self) -> None:
         self._client.connect(
@@ -120,13 +123,11 @@ class HassMqttClient:
             lwt_qos=0
         )
 
-        message = "\n".join(
-            [
-                "Connected to MQTT Broker:",
-                f"Address:   {self._config.network.mqtt_broker_ip}:{PORT}",
-                f"Client ID: {self._config.station_mqtt_id}",
-            ]
-        )
+        message = "\n".join([
+            "Connected to MQTT Broker:",
+            f"Address:   {self._config.network.mqtt_broker_ip}:{PORT}",
+            f"Client ID: {self._config.station_mqtt_id}",
+        ])
         self._logger.log(message)
 
     def _set_online(self) -> None:
@@ -136,7 +137,6 @@ class HassMqttClient:
             self._logger.log(f"Failed to publish LWT online message: {e}")
 
     def _on_reconnect_callback(self) -> None:
-        """Light callback that only toggles boolean flag - called from interrupt context"""
         self._pending_reconnect = True
 
     def _setup_entities(self) -> None:
@@ -151,8 +151,8 @@ class HassMqttClient:
                 availability_topic=self._availability_topic,
                 logger=self._logger,
             )
-            sensor_messager = SensorMessager(params)
-            valve_messager = ValveMessager(params)
+            sensor_messager = MqttHassSensor(params)
+            valve_messager = MqttHassValve(params)
 
             self._sensor_messagers.append(sensor_messager)
             self._valve_messagers.append(valve_messager)
@@ -168,7 +168,6 @@ class HassMqttClient:
         topic = topic_bytes.decode()
         msg = msg_bytes.decode()
         
-        # Handle Home Assistant status messages
         if topic == "homeassistant/status":
             self._handle_ha_status_message(msg)
             return
@@ -179,7 +178,6 @@ class HassMqttClient:
                 valve_messager.handle_command_message(msg)
             except Exception as e:
                 self._logger.log(f"Error handling command message for {topic}: {e}")
-        # No else: logging is handled by the messager classes
 
     def _start_periodic_publish(self) -> None:
         self._timer.init(
@@ -191,8 +189,18 @@ class HassMqttClient:
     def _set_pending_publish(self, _=None) -> None:
         self._pending_publish = True
 
+    def _start_broker_connectivity_monitoring(self) -> None:
+        self._broker_connectivity_timer.init(
+            period=BROKER_CONNECTIVITY_TEST_INTERVAL,
+            mode=Timer.PERIODIC,
+            callback=self._set_pending_broker_connectivity_test,
+        )
+        self._logger.log("Broker connectivity monitoring started")
+
+    def _set_pending_broker_connectivity_test(self, _=None) -> None:
+        self._pending_broker_connectivity_test = True
+
     def _monitor_hass_status(self) -> None:
-        """Subscribe to Home Assistant status messages"""
         try:
             self._client.subscribe("homeassistant/status", qos=0)
             self._logger.log("Subscribed to Home Assistant status messages")
@@ -200,7 +208,6 @@ class HassMqttClient:
             self._logger.log(f"Failed to subscribe to HA status: {e}")
 
     def _handle_ha_status_message(self, status: str) -> None:
-        """Handle Home Assistant status messages"""
         if status == "online":
             self._logger.log("Home Assistant came online - republishing availability")
             self._republish_after_ha_restart()
@@ -208,7 +215,6 @@ class HassMqttClient:
             self._logger.log("Home Assistant went offline")
 
     def _republish_after_ha_restart(self) -> None:
-        """Republish availability and sensor data after HA comes online"""
         try:
             self._client.publish(self._availability_topic, "online", retain=True)
             
