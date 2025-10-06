@@ -32,7 +32,7 @@ class MqttRobustClient(MQTTClient):
         retry_time = 0
         while retry_time <= self.MAX_RECONNECT_TIME:
             try:
-                result = super().connect(False)  # clean_session=False like umqtt.robust
+                result = super().connect(True)  # clean_session=True for consistency
                 # Call callback to toggle boolean flag (light work only)
                 if self._on_reconnect_callback:
                     self._on_reconnect_callback()
