@@ -21,7 +21,7 @@ MessagerParams = namedtuple(
 )
 
 
-class BaseMessager:
+class MqttHassEntity:
     def __init__(self, params: "MessagerParams") -> None:
         self._client: MQTTClient = params.mqtt_client
         self._station_id: str = params.station_id
@@ -30,9 +30,9 @@ class BaseMessager:
         self._availability_topic: str = params.availability_topic
         self._logger: Logger = params.logger
 
-    def _publish_discovery_message(self) -> None:
+    def publish_discovery_message(self) -> None:
         raise NotImplementedError(
-            "_publish_discovery_message must be implemented by subclasses"
+            "publish_discovery_message must be implemented by subclasses"
         )
 
     def _log_discovery_message(self, topic: str, payload: dict) -> None:
@@ -46,15 +46,15 @@ class BaseMessager:
         self._logger.log("\n".join(lines))
 
 
-class SensorMessager(BaseMessager):
+class MqttHassSensor(MqttHassEntity):
     def __init__(self, params: MessagerParams) -> None:
         super().__init__(params)
         self._state_topic: str = (
             f"irrigation/{params.station_id}/{params.irrigation_point.config.id}/sensor"
         )
-        self._publish_discovery_message()
+        self.publish_discovery_message()
 
-    def _publish_discovery_message(self) -> None:
+    def publish_discovery_message(self) -> None:
         discovery_topic: str = (
             f"homeassistant/sensor/{self._station_id}-{self._point.config.id}/config"
         )
@@ -71,23 +71,24 @@ class SensorMessager(BaseMessager):
         }
         self._client.publish(discovery_topic, dumps(payload), retain=True)
         self._log_discovery_message(discovery_topic, payload)
+        # Also publish state after discovery message so the sensor has a value from the start        
+        self.publish_moisture_level()
 
     def publish_moisture_level(self) -> None:
         value: float = self._point.get_sensor_value()
         payload: str = dumps({"moisture": round(value * 100, 2)})
         self._client.publish(self._state_topic, payload)
-        # self._logger.log(f"{self._state_topic}::{payload}")
+        self._logger.log(f"{self._state_topic}::{payload}")
 
 
-class ValveMessager(BaseMessager):
+class MqttHassValve(MqttHassEntity):
     def __init__(self, params: MessagerParams) -> None:
         super().__init__(params)
         self._state_topic: str = f"irrigation/{params.station_id}/{params.irrigation_point.config.id}/valve/state"
         self._command_topic: str = f"irrigation/{params.station_id}/{params.irrigation_point.config.id}/valve/set"
-        self._publish_discovery_message()
-        self.publish_valve_state()
+        self.publish_discovery_message()
 
-    def _publish_discovery_message(self) -> None:
+    def publish_discovery_message(self) -> None:
         discovery_topic: str = (
             f"homeassistant/valve/{self._station_id}-{self._point.config.id}/config"
         )
@@ -107,6 +108,8 @@ class ValveMessager(BaseMessager):
         }
         self._client.publish(discovery_topic, dumps(payload), retain=True)
         self._log_discovery_message(discovery_topic, payload)
+        # Also publish state after discovery message so the valve has a correct initial state
+        self.publish_valve_state()
 
     def publish_valve_state(self) -> None:
         state = self._point.get_valve_state()

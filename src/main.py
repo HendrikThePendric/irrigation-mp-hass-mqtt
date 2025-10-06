@@ -1,11 +1,12 @@
 from machine import reset, Pin
-from time import sleep
-from hass_mqtt_client import HassMqttClient
+from time import sleep, ticks_ms
+from mqtt_hass_manager import MqttHassManager
 from irrigation_station import IrrigationStation
 from logger import Logger
 from config import Config
 from time_keeper import TimeKeeper
 from wifi_manager import WiFiManager
+import gc
 
 PRINT_LOGS = True
 
@@ -16,31 +17,46 @@ if PRINT_LOGS:
     # to be visible
     sleep(2)
 
-logger = Logger(PRINT_LOGS)
-time_keeper = TimeKeeper(logger)
-config = Config("./config.json")
-station = IrrigationStation(config, logger)
-wifi_manager = WiFiManager(config.network, logger)
-hass_mqtt_client = HassMqttClient(config, logger, station)
-
-logger.log(str(config))
-wifi_manager.setup()
-time_keeper.initialize_ntp_synchronization()
-logger.enable_timestamp_prefix(time_keeper.get_current_cet_datetime_str)
-hass_mqtt_client.setup()
-
-# Blink led for debugging
-onboard_led = Pin("LED", Pin.OUT)
-
-
 def main() -> None:
+    # Initialize all components
+    logger = Logger(PRINT_LOGS)
+    time_keeper = TimeKeeper(logger)
+    config = Config("./config.json")
+    station = IrrigationStation(config, logger)
+    wifi_manager = WiFiManager(config.network, logger)
+    mqtt_manager = MqttHassManager(config, logger, station)
+    
+    # Setup components
+    logger.log(str(config))
+    wifi_manager.setup()
+    time_keeper.initialize_ntp_synchronization()
+    logger.enable_timestamp_prefix(time_keeper.get_current_cet_datetime_str)
+    mqtt_manager.setup()
+    
+    # LED for visual feedback
+    onboard_led = Pin("LED", Pin.OUT)
+    
+    loop_count = 0
+    
     try:
         while True:
             wifi_manager.handle_pending_connection_check()
-            hass_mqtt_client.check_msg()
+            mqtt_manager.check_msg()
             time_keeper.handle_pending_ntp_sync()
-            hass_mqtt_client.handle_pending_publish()
-            onboard_led.toggle()
+            mqtt_manager.handle_pending_messages()
+            
+            loop_count += 1
+            
+            # Run garbage collection every 30 loops (30 seconds) to prevent memory buildup
+            if loop_count % 30 == 0:
+                gc.collect()
+
+            # LED on every third second (loop_count % 3 == 0), off otherwise
+            if loop_count % 3 == 0:
+                onboard_led.on()
+            else:
+                onboard_led.off()
+            
             sleep(1)
     except Exception as e:
         logger.log(f"Exception in main loop: {e}")
