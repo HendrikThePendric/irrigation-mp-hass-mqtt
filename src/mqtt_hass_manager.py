@@ -89,8 +89,23 @@ class MqttHassManager:
             self._pending_publish = False
 
     def _handle_pending_reconnect(self) -> None:
-        self._logger.log("Reconnected to MQTT - restoring availability")
+        self._logger.log("Reconnected to MQTT - restoring availability and subscriptions")
         self._set_online()
+        self._resubscribe_after_reconnect()
+
+    def _resubscribe_after_reconnect(self) -> None:
+        """Resubscribe to all topics after reconnection since we use clean_session=True initially"""
+        try:
+            # Resubscribe to Home Assistant status
+            self._client.subscribe("homeassistant/status", qos=0)
+            
+            # Resubscribe to all valve command topics
+            for valve_messager in self._valve_messagers:
+                valve_messager.subscribe_to_command_topic()
+                
+            self._logger.log("Resubscribed to all command topics after reconnection")
+        except Exception as e:
+            self._logger.log(f"Failed to resubscribe after reconnection: {e}")
 
     def _handle_pending_broker_connectivity_test(self) -> None:
         current_time = ticks_ms()
