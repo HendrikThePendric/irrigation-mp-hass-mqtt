@@ -6,6 +6,7 @@ from irrigation_station import IrrigationStation
 from mqtt_hass_entities import MqttHassSensor, MqttHassValve, MessagerParams
 from ssl import SSLContext, PROTOCOL_TLS_CLIENT
 from time import sleep, ticks_ms
+import gc
 
 MAX_RETRY_TIME = 30
 RETRY_DELAY = 2
@@ -46,6 +47,7 @@ class MqttHassManager:
         self._valve_messagers = []
         self._command_topic_to_valve = {}
         self._subscribed_topics = set()  # Track all subscribed topics
+        self._reconnect_count = 0  # Track reconnection frequency
         self._device_info = {
             "identifiers": [self._config.station_id],
             "name": self._config.station_name,
@@ -90,9 +92,25 @@ class MqttHassManager:
             self._pending_publish = False
 
     def _handle_pending_reconnect(self) -> None:
+        # Increment reconnection counter
+        self._reconnect_count += 1
+        
+        # Log memory before reconnection
+        gc.collect()
+        free_mem = gc.mem_free()
+        alloc_mem = gc.mem_alloc()
+        self._logger.log(f"Reconnect #{self._reconnect_count} - Memory before: Free={free_mem}, Allocated={alloc_mem}")
+        
         self._logger.log("Reconnected to MQTT - restoring availability and subscriptions")
         self._set_online()
         self._resubscribe_after_reconnect()
+        
+        # Log memory after reconnection
+        gc.collect()
+        free_mem_after = gc.mem_free()
+        alloc_mem_after = gc.mem_alloc()
+        mem_delta = free_mem_after - free_mem
+        self._logger.log(f"Memory after reconnect: Free={free_mem_after}, Allocated={alloc_mem_after}, Delta={mem_delta}")
 
     def _resubscribe_after_reconnect(self) -> None:
         """Resubscribe to all topics after reconnection since we use clean_session=True initially"""
