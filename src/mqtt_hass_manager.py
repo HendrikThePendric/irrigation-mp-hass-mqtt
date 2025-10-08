@@ -45,6 +45,7 @@ class MqttHassManager:
         self._sensor_messagers = []
         self._valve_messagers = []
         self._command_topic_to_valve = {}
+        self._subscribed_topics = set()  # Track all subscribed topics
         self._device_info = {
             "identifiers": [self._config.station_id],
             "name": self._config.station_name,
@@ -96,12 +97,18 @@ class MqttHassManager:
     def _resubscribe_after_reconnect(self) -> None:
         """Resubscribe to all topics after reconnection since we use clean_session=True initially"""
         try:
+            # First, unsubscribe from all previously subscribed topics to clean up client state
+            self._unsubscribe_all()
+            
+            # Clear the set of subscribed topics since clean_session=True cleared them on broker
+            self._subscribed_topics.clear()
+            
             # Resubscribe to Home Assistant status
-            self._client.subscribe("homeassistant/status", qos=0)
+            self._subscribe_topic("homeassistant/status", qos=0)
             
             # Resubscribe to all valve command topics
             for valve_messager in self._valve_messagers:
-                valve_messager.subscribe_to_command_topic()
+                self._subscribe_topic(valve_messager._command_topic)
                 
             self._logger.log("Resubscribed to all command topics after reconnection")
         except Exception as e:
@@ -140,6 +147,20 @@ class MqttHassManager:
     def _on_reconnect_callback(self) -> None:
         self._pending_reconnect = True
 
+    def _subscribe_topic(self, topic: str, qos: int = 0) -> None:
+        """Subscribe to a topic and track it"""
+        self._client.subscribe(topic, qos=qos)
+        self._subscribed_topics.add(topic)
+        self._logger.log(f"Subscribed::{topic}")
+
+    def _unsubscribe_all(self) -> None:
+        """Unsubscribe from all tracked topics to clean up client state"""
+        for topic in self._subscribed_topics:
+            try:
+                self._client.unsubscribe(topic)
+            except Exception as e:
+                self._logger.log(f"Failed to unsubscribe from {topic}: {e}")
+
     def _setup_entities(self) -> None:
         for _, point in self._config.irrigation_points.items():
             irrigation_point = self._station.get_point(point.id)
@@ -159,7 +180,7 @@ class MqttHassManager:
             self._valve_messagers.append(valve_messager)
             self._command_topic_to_valve[valve_messager._command_topic] = valve_messager
             try:
-                valve_messager.subscribe_to_command_topic()
+                self._subscribe_topic(valve_messager._command_topic)
             except Exception as e:
                 self._logger.log(
                     f"Failed to subscribe to {valve_messager._command_topic}: {e}"
@@ -203,7 +224,7 @@ class MqttHassManager:
 
     def _monitor_hass_status(self) -> None:
         try:
-            self._client.subscribe("homeassistant/status", qos=0)
+            self._subscribe_topic("homeassistant/status", qos=0)
             self._logger.log("Subscribed to Home Assistant status messages")
         except Exception as e:
             self._logger.log(f"Failed to subscribe to HA status: {e}")
