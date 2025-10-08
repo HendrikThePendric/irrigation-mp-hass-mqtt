@@ -28,6 +28,17 @@ class MqttRobustClient(MQTTClient):
                 self._logger.log(f"mqtt: {e}")
 
     def reconnect(self):
+        # Close existing socket before reconnecting to prevent resource leak
+        try:
+            if hasattr(self, 'sock') and self.sock:
+                self.sock.close()
+                self.sock = None
+                if self._logger:
+                    self._logger.log("Closed existing socket before reconnect")
+        except Exception as e:
+            if self._logger:
+                self._logger.log(f"Error closing socket: {e}")
+        
         i = 0
         retry_time = 0
         while retry_time <= self.MAX_RECONNECT_TIME:
