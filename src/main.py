@@ -57,7 +57,7 @@ from ads1x15 import ADS1115
 
 # Initialize I2C and ADS1115
 i2c = I2C(0, scl=Pin(1), sda=Pin(0), freq=400000)
-ads = ADS1115(i2c, address=0x48) # First ADS1115
+ads = ADS1115(i2c, address=0x48, gain=0) # First ADS1115
 
 # Initialize MOSFET on GP18
 mosfet = Pin(18, Pin.OUT)
@@ -67,17 +67,17 @@ print("Starting MOSFET and Sensor Test...")
 while True:
     # Turn MOSFET ON (sensor powered)
     mosfet.on()
-    print("MOSFET ON - Sensor should be powered")
-    time.sleep_ms(500) # Wait for sensor to stabilize
+    print(f"MOSFET ON - Sensor should be powered: {mosfet.value()}")
+    time.sleep_ms(300) # Wait for sensor to stabilize
 
     # Read sensor value from A0
     raw_value = ads.read(0) # Read channel A0
-    voltage = raw_value * 4.096 / 32767 # Convert to voltage
+    voltage = raw_value * 6.144 / 32767 # Convert to voltage
 
     print(f"Raw: {raw_value}, Voltage: {voltage:.3f}V")
 
     # Turn MOSFET OFF
     time.sleep(5)
     mosfet.off()
-    print("MOSFET OFF - Sensor should be off")
+    print(f"MOSFET OFF - Sensor should be off: {mosfet.value()}")
     time.sleep(5) # Wait 2 seconds before next reading
