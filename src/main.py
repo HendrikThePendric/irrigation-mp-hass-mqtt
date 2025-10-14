@@ -6,7 +6,6 @@ from logger import Logger
 from config import Config
 from time_keeper import TimeKeeper
 from wifi_manager import WiFiManager
-from system_monitor import SystemMonitor
 import gc
 
 PRINT_LOGS = True
@@ -33,21 +32,18 @@ def main() -> None:
     time_keeper.initialize_ntp_synchronization()
     logger.enable_timestamp_prefix(time_keeper.get_current_cet_datetime_str)
     mqtt_manager.setup()
-    system_monitor = SystemMonitor(logger)
     
     # LED for visual feedback
     onboard_led = Pin("LED", Pin.OUT)
     
     try:
         while True:
-            system_monitor.loop_started()
             wifi_manager.handle_pending_connection_check()
             mqtt_manager.check_msg()
             time_keeper.handle_pending_ntp_sync()
             mqtt_manager.handle_pending_messages()
             # Toggle LED every tick
             onboard_led.toggle()
-            system_monitor.loop_ended()
 
             sleep(1)
     except Exception as e:

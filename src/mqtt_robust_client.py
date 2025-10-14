@@ -9,16 +9,19 @@ class MqttRobustClient(MQTTClient):
     
     DELAY = 2
     DEBUG = False
-    MAX_RECONNECT_TIME = 600  # 10 minutes in seconds
+    MAX_RECONNECT_FAILURES = 30
+    MAX_MESSAGE_FAILURES = 10
 
     def __init__(self, client_id, server, port=0, user=None, password=None, 
                  keepalive=0, ssl=None, ssl_params={}, logger=None, on_reconnect_callback=None):
         super().__init__(client_id, server, port, user, password, keepalive, ssl, ssl_params)
         self._logger = logger
         self._on_reconnect_callback = on_reconnect_callback
+        self._subsequent_message_failures = 0
 
     def delay(self, i):
-        sleep(self.DELAY)
+        multiplier = i if isinstance(i, int) and i > 0 else 1
+        sleep(self.DELAY * multiplier)
 
     def log(self, in_reconnect, e):
         if self._logger:
@@ -28,45 +31,46 @@ class MqttRobustClient(MQTTClient):
                 self._logger.log(f"mqtt: {e}")
 
     def reconnect(self):
-        i = 0
-        retry_time = 0
-        while retry_time <= self.MAX_RECONNECT_TIME:
+        reconnect_failures = 0
+
+        while reconnect_failures <= self.MAX_RECONNECT_FAILURES and self._subsequent_message_failures <= self.MAX_MESSAGE_FAILURES:
             try:
-                result = super().connect(True)  # clean_session=True for consistency
+                result = super().connect(clean_session=False)
                 # Call callback to toggle boolean flag (light work only)
                 if self._on_reconnect_callback:
                     self._on_reconnect_callback()
                 return result
             except OSError as e:
+                reconnect_failures += 1
                 # Log on first attempt and then every 5 attempts
-                if i == 0 or i % 5 == 0:
+                if reconnect_failures == 0 or reconnect_failures % 5 == 0:
                     self.log(True, e)
-                i += 1
-                self.delay(i)
-                retry_time += self.DELAY
-        
-        # 10 minutes of reconnect attempts failed - reset device
+                self.delay(reconnect_failures)
         if self._logger:
-            self._logger.log("MQTT reconnect failed after 10 minutes of retries, resetting device")
+            self._logger.log(f"MQTT reconnect failed after {self.MAX_RECONNECT_FAILURES} of retries, resetting device")
         reset()
 
     def publish(self, topic, msg, retain=False, qos=0):
         """Publish with retry and reconnect until reconnect timeout expires"""
         while 1:
             try:
-                return super().publish(topic, msg, retain, qos)
+                result = super().publish(topic, msg, retain, qos)
+                self._subsequent_message_failures = 0
+                return result
             except OSError as e:
+                self._subsequent_message_failures += 1
                 self.log(False, e)
             self.reconnect()
-
-
 
     def wait_msg(self):
         """Wait for message with retry and reconnect until reconnect timeout expires"""
         while 1:
             try:
-                return super().wait_msg()
+                result = super().wait_msg()
+                self._subsequent_message_failures = 0
+                return result
             except OSError as e:
+                self._subsequent_message_failures += 1
                 self.log(False, e)
             self.reconnect()
 
@@ -75,8 +79,11 @@ class MqttRobustClient(MQTTClient):
         while attempts:
             self.sock.setblocking(False)
             try:
-                return super().wait_msg()
+                result= super().wait_msg()
+                self._subsequent_message_failures = 0
+                return result
             except OSError as e:
+                self._subsequent_message_failures += 1
                 self.log(False, e)
             self.reconnect()
             attempts -= 1
