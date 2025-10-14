@@ -35,6 +35,8 @@ def main() -> None:
     
     # LED for visual feedback
     onboard_led = Pin("LED", Pin.OUT)
+
+    loop_count = 0
     
     try:
         while True:
@@ -42,8 +44,18 @@ def main() -> None:
             mqtt_manager.check_msg()
             time_keeper.handle_pending_ntp_sync()
             mqtt_manager.handle_pending_messages()
-            # Toggle LED every tick
-            onboard_led.toggle()
+            
+            loop_count += 1
+
+            # Run garbage collection every 30 loops (30 seconds) to prevent memory buildup
+            if loop_count % 30 == 0:
+                gc.collect()
+
+            # LED on every third second (loop_count % 3 == 0), off otherwise
+            if loop_count % 3 == 0:
+                onboard_led.on()
+            else:
+                onboard_led.off()
 
             sleep(1)
     except Exception as e:
