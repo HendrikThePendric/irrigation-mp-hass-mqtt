@@ -54,6 +54,10 @@ class ADS1115:
     ) -> float:
         """Read voltage from specified channel (0-3) in volts."""
         ...
+    
+    def raw_to_v(self, raw: int) -> float:
+        """Convert raw ADC value to voltage in volts."""
+        ...
         
     def set_gain(self, gain: int) -> None:
         """Set the programmable gain amplifier."""
@@ -103,6 +107,10 @@ class ADS1015:
         gain: Optional[int] = None,
         rate: Optional[int] = None
     ) -> float: ...
+    
+    def raw_to_v(self, raw: int) -> float:
+        """Convert raw ADC value to voltage in volts."""
+        ...
         
     def set_gain(self, gain: int) -> None: ...
     def set_rate(self, rate: int) -> None: ...

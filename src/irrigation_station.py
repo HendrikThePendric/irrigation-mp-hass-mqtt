@@ -31,7 +31,7 @@ class IrrigationStation:
         self._ads_modules: dict[int, ADS1115] = {}
         for address in unique_addresses:
             try:
-                self._ads_modules[address] = ADS1115(self._i2c, address=address)
+                self._ads_modules[address] = ADS1115(self._i2c, address=address, gain=0)
                 self._logger.log(f"[ADS1115] Initialized module at address {hex(address)}")
             except Exception as e:
                 self._logger.log(f"[ADS1115] Failed to initialize module at address {hex(address)}: {e}")

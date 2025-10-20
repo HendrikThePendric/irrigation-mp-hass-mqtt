@@ -26,12 +26,15 @@ class Sensor:
         self._mosfet.value(1)
         
         # Wait for sensor to stabilize
-        sleep_ms(150)
+        sleep_ms(300)
         
         try:
-            # Read from ADS1115 and convert to 0.0-1.0 range 
-            # (ADS1115 is 16-bit signed: -32768 to 32767, single-ended: 0 to 32767)
-            normalized_value = self._ads.read(self._ads_channel) / 32767.0
+            # Read from ADS1115
+            raw = self._ads.read(rate=4, channel=self._ads_channel)
+            voltage = self._ads.raw_to_v(raw)
+            
+            # Normalize to 0.0-1.0 range (assuming 0-5V sensor range)
+            normalized_value = voltage / 5.0
             
             # Validate the computed value is in expected range
             if not (0.0 <= normalized_value <= 1.0):
