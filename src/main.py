@@ -35,7 +35,7 @@ def main() -> None:
     
     # LED for visual feedback
     onboard_led = Pin("LED", Pin.OUT)
-    
+
     loop_count = 0
     
     try:
@@ -46,7 +46,7 @@ def main() -> None:
             mqtt_manager.handle_pending_messages()
             
             loop_count += 1
-            
+
             # Run garbage collection every 30 loops (30 seconds) to prevent memory buildup
             if loop_count % 30 == 0:
                 gc.collect()
@@ -56,7 +56,7 @@ def main() -> None:
                 onboard_led.on()
             else:
                 onboard_led.off()
-            
+
             sleep(1)
     except Exception as e:
         logger.log(f"Exception in main loop: {e}")
