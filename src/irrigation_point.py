@@ -1,3 +1,4 @@
+from ads1x15 import ADS1115
 from config import IrrigationPointConfig
 from sensor import Sensor
 from valve import Valve
@@ -7,13 +8,13 @@ from logger import Logger
 class IrrigationPoint:
     """Represents a single irrigation point with sensor and valve components."""
     
-    def __init__(self, config: IrrigationPointConfig, logger: Logger) -> None:
+    def __init__(self, config: IrrigationPointConfig, ads: ADS1115, logger: Logger) -> None:
         """Initialize an irrigation point with its sensor and valve components."""
         self.config = config
         self._logger = logger
         
         # Initialize sensor and valve components
-        self._sensor = Sensor(config, logger)
+        self._sensor = Sensor(config, ads, logger)
         self._valve = Valve(config, logger)
 
     def get_sensor_value(self) -> float:

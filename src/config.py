@@ -35,6 +35,20 @@ def _compute_device_id() -> str:
     return ''.join(f'{b:02x}' for b in unique_id())[-8:]
 
 
+def _parse_ads_address(ads_address_str: str) -> int:
+    """Parse and validate ADS1115 address from hex string."""
+    try:
+        address = int(ads_address_str, 16)
+    except ValueError:
+        raise ValueError(f"Invalid ads_address '{ads_address_str}': must be a valid hexadecimal string (e.g., '0x48')")
+    
+    valid_addresses = [0x48, 0x49, 0x4A, 0x4B]
+    if address not in valid_addresses:
+        raise ValueError(f"Invalid ads_address {hex(address)}: must be one of {', '.join(hex(a) for a in valid_addresses)}")
+    
+    return address
+
+
 class NetworkConfig:
     def __init__(self, conf: dict) -> None:
         self.wifi_ssid: str = get_if_valid("wifi_ssid", conf, str)
@@ -47,7 +61,8 @@ class IrrigationPointConfig:
         self.name: str = get_if_valid("name", conf, str)
         self.valve_pin: int = get_if_valid("valve_pin", conf, int)
         self.mosfet_pin: int = get_if_valid("mosfet_pin", conf, int)
-        self.ads_address: int = get_if_valid("ads_address", conf, int)
+        ads_address_str: str = get_if_valid("ads_address", conf, str)
+        self.ads_address: int = _parse_ads_address(ads_address_str)
         self.ads_channel: int = get_if_valid("ads_channel", conf, int)
         self.id: str = _clean_string(self.name)
 

@@ -1,4 +1,4 @@
-from machine import Pin, I2C
+from machine import Pin
 from ads1x15 import ADS1115
 from time import sleep_ms
 from config import IrrigationPointConfig
@@ -8,24 +8,14 @@ from logger import Logger
 class Sensor:
     """Represents a soil moisture sensor with MOSFET power control."""
     
-    def __init__(self, config: IrrigationPointConfig, logger: Logger) -> None:
+    def __init__(self, config: IrrigationPointConfig, ads: ADS1115, logger: Logger) -> None:
         """Initialize the sensor with power control and ADC configuration."""
         self._name = config.name
         self._mosfet = Pin(config.mosfet_pin, Pin.OUT) 
-        self._ads_address = config.ads_address
         self._ads_channel = config.ads_channel
         self._logger = logger
         self._value = 0.5
-        self._ads = None
-        
-        # Initialize I2C and ADS1115 for this sensor
-        self._i2c = I2C(0, scl=Pin(1), sda=Pin(0), freq=400000)
-        try:
-            self._ads = ADS1115(self._i2c, address=self._ads_address)
-            self._logger.log(f"[ADS1115] Sensor {self._name}: Initialized module at address {hex(self._ads_address)}")
-        except Exception as e:
-            self._logger.log(f"[ADS1115] Sensor {self._name}: Failed to initialize module at address {hex(self._ads_address)}: {e}")
-            raise
+        self._ads = ads
         
         # Ensure sensor is powered off initially
         self._mosfet.value(0)

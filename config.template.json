@@ -10,14 +10,14 @@
       "name": "Location A",
       "valve_pin": 2,
       "mosfet_pin": 21,
-      "ads_address": 72,
+      "ads_address": "0x48",
       "ads_channel": 0
     },
     {
       "name": "Location B",
       "valve_pin": 3,
       "mosfet_pin": 22,
-      "ads_address": 73,
+      "ads_address": "0x49",
       "ads_channel": 1
     }
   ]
