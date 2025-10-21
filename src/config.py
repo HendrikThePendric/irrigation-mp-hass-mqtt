@@ -49,6 +49,12 @@ def _parse_ads_address(ads_address_str: str) -> int:
     return address
 
 
+def _get_publish_interval_ms(conf: dict) -> int:
+    """Extract and convert publish_interval_minutes to milliseconds."""
+    publish_interval_minutes: int = get_if_valid("publish_interval_minutes", conf, int)
+    return publish_interval_minutes * 60 * 1000
+
+
 class NetworkConfig:
     def __init__(self, conf: dict) -> None:
         self.wifi_ssid: str = get_if_valid("wifi_ssid", conf, str)
@@ -88,6 +94,9 @@ class Config:
         self.rolling_window: int = get_if_valid("rolling_window", conf, int)
         self.ema_alpha: float = get_if_valid("ema_alpha", conf, float)
 
+        # Publish interval in minutes, converted to ms
+        self.publish_interval_ms: int = _get_publish_interval_ms(conf)
+
         for irrigation_point_conf in irrigation_points_conf:
             irrigation_point = IrrigationPointConfig(irrigation_point_conf)
             # Copy global smoothing params to each point for convenience
@@ -107,6 +116,7 @@ class Config:
             f"  mqtt_broker_ip: {self.network.mqtt_broker_ip}",
             f"rolling_window:   {self.rolling_window}",
             f"ema_alpha:        {self.ema_alpha}",
+            f"publish_interval: {self.publish_interval_ms // 60000} min ({self.publish_interval_ms} ms)",
             "irrigation_points:",
         ]
         for ip in self.irrigation_points.values():

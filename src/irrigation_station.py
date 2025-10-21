@@ -50,8 +50,8 @@ class IrrigationStation:
 
     def _start_measurement_timer(self) -> None:
         """Start the periodic measurement timer."""
-        # Calculate interval to collect rolling_window samples over 5 minutes (300,000 ms)
-        interval_ms = 300_000 // self._config.rolling_window
+        # Calculate interval to collect rolling_window samples over the publish interval
+        interval_ms = self._config.publish_interval_ms // self._config.rolling_window
         self._measurement_timer.init(
             period=interval_ms,
             mode=Timer.PERIODIC,

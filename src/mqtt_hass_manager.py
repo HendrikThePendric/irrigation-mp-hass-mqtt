@@ -12,7 +12,6 @@ CERT_PATH = "./irrigationbackyard_crt.der"
 KEY_PATH = "./irrigationbackyard_key.der"
 PORT = 8883
 KEEPALIVE = 60
-PUBLISH_INTERVAL = 300_000
 BROKER_CONNECTIVITY_TEST_INTERVAL = 1800000
 
 
@@ -180,7 +179,7 @@ class MqttHassManager:
 
     def _start_periodic_publish(self) -> None:
         self._timer.init(
-            period=PUBLISH_INTERVAL,
+            period=self._config.publish_interval_ms,
             mode=Timer.PERIODIC,
             callback=self._set_pending_publish,
         )
