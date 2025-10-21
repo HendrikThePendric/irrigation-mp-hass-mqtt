@@ -1,5 +1,5 @@
 from machine import reset, Pin
-from time import sleep, ticks_ms
+from time import sleep
 from mqtt_hass_manager import MqttHassManager
 from irrigation_station import IrrigationStation
 from logger import Logger

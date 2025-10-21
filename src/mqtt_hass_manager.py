@@ -5,10 +5,8 @@ from logger import Logger
 from irrigation_station import IrrigationStation
 from mqtt_hass_entities import MqttHassSensor, MqttHassValve, MessagerParams
 from ssl import SSLContext, PROTOCOL_TLS_CLIENT
-from time import sleep, ticks_ms
+from time import ticks_ms
 
-MAX_RETRY_TIME = 30
-RETRY_DELAY = 2
 CA_PATH = "./ca_crt.der"
 CERT_PATH = "./irrigationbackyard_crt.der"
 KEY_PATH = "./irrigationbackyard_key.der"

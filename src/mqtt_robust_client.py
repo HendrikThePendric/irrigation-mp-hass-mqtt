@@ -8,7 +8,6 @@ class MqttRobustClient(MQTTClient):
     """MQTT Client based on umqtt.robust with threading-safe callback pattern"""
     
     DELAY = 2
-    DEBUG = False
     MAX_RECONNECT_FAILURES = 30
     MAX_MESSAGE_FAILURES = 10
 

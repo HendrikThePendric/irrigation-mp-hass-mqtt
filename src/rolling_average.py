@@ -39,13 +39,3 @@ class RollingAverage:
             return sum(self._values) / len(self._values)
         else:
             return 0.0  # Default if no readings
-
-    def get_sma(self) -> float:
-        """Get the simple moving average."""
-        if not self._values:
-            return 0.0
-        return sum(self._values) / len(self._values)
-
-    def get_ema(self) -> float:
-        """Get the exponential moving average."""
-        return self._ema_value if self._ema_value is not None else 0.0
