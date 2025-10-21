@@ -49,6 +49,12 @@ def _parse_ads_address(ads_address_str: str) -> int:
     return address
 
 
+def _get_publish_interval_ms(conf: dict) -> int:
+    """Extract and convert publish_interval_minutes to milliseconds."""
+    publish_interval_minutes: int = get_if_valid("publish_interval_minutes", conf, int)
+    return publish_interval_minutes * 60 * 1000
+
+
 class NetworkConfig:
     def __init__(self, conf: dict) -> None:
         self.wifi_ssid: str = get_if_valid("wifi_ssid", conf, str)
@@ -65,6 +71,9 @@ class IrrigationPointConfig:
         self.ads_address: int = _parse_ads_address(ads_address_str)
         self.ads_channel: int = get_if_valid("ads_channel", conf, int)
         self.id: str = _clean_string(self.name)
+        # These will be set from global config
+        self.rolling_window: int = 5
+        self.ema_alpha: float = 0.2
 
 
 class Config:
@@ -81,8 +90,18 @@ class Config:
         self.network = NetworkConfig(network_conf)
         self.irrigation_points: dict[str, IrrigationPointConfig] = {}
 
+        # Global smoothing parameters
+        self.rolling_window: int = get_if_valid("rolling_window", conf, int)
+        self.ema_alpha: float = get_if_valid("ema_alpha", conf, float)
+
+        # Publish interval in minutes, converted to ms
+        self.publish_interval_ms: int = _get_publish_interval_ms(conf)
+
         for irrigation_point_conf in irrigation_points_conf:
             irrigation_point = IrrigationPointConfig(irrigation_point_conf)
+            # Copy global smoothing params to each point for convenience
+            irrigation_point.rolling_window = self.rolling_window
+            irrigation_point.ema_alpha = self.ema_alpha
             self.irrigation_points[irrigation_point.id] = irrigation_point
 
     def __str__(self) -> str:
@@ -95,6 +114,9 @@ class Config:
             f"  wifi_ssid:      {self.network.wifi_ssid}",
             f"  wifi_password:  {self.network.wifi_password}",
             f"  mqtt_broker_ip: {self.network.mqtt_broker_ip}",
+            f"rolling_window:   {self.rolling_window}",
+            f"ema_alpha:        {self.ema_alpha}",
+            f"publish_interval: {self.publish_interval_ms // 60000} min ({self.publish_interval_ms} ms)",
             "irrigation_points:",
         ]
         for ip in self.irrigation_points.values():
@@ -104,5 +126,7 @@ class Config:
             lines.append(f"    mosfet_pin:   {str(ip.mosfet_pin)}")
             lines.append(f"    ads_address:  {hex(ip.ads_address)}")
             lines.append(f"    ads_channel:  {str(ip.ads_channel)}")
+            lines.append(f"    rolling_window: {ip.rolling_window}")
+            lines.append(f"    ema_alpha:    {ip.ema_alpha}")
 
         return "\n".join(lines)
