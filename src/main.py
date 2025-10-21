@@ -44,6 +44,7 @@ def main() -> None:
             mqtt_manager.check_msg()
             time_keeper.handle_pending_ntp_sync()
             mqtt_manager.handle_pending_messages()
+            station.handle_pending_measurement()
             
             loop_count += 1
 

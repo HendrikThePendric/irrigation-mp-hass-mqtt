@@ -14,7 +14,7 @@ CERT_PATH = "./irrigationbackyard_crt.der"
 KEY_PATH = "./irrigationbackyard_key.der"
 PORT = 8883
 KEEPALIVE = 60
-PUBLISH_INTERVAL = 240_000
+PUBLISH_INTERVAL = 300_000
 BROKER_CONNECTIVITY_TEST_INTERVAL = 1800000
 
 

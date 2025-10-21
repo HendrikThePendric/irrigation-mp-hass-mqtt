@@ -1,4 +1,4 @@
-from machine import I2C, Pin
+from machine import I2C, Pin, Timer
 from ads1x15 import ADS1115
 from config import Config
 from irrigation_point import IrrigationPoint
@@ -13,6 +13,8 @@ class IrrigationStation:
         self._config = config
         self._points: dict[str, IrrigationPoint] = {}
         self._logger = logger
+        self._measurement_timer = Timer(-1)
+        self._pending_measurement = False
         
         # Initialize I2C bus (shared for all ADS modules)
         self._i2c = I2C(0, scl=Pin(1), sda=Pin(0), freq=400000)
@@ -24,6 +26,9 @@ class IrrigationStation:
         for point_id, point_conf in self._config.irrigation_points.items():
             ads = self._ads_modules[point_conf.ads_address]
             self._points[point_id] = IrrigationPoint(point_conf, ads, self._logger)
+
+        # Start periodic measurements
+        self._start_measurement_timer()
 
     def _setup_ads_modules(self) -> None:
         """Deduplicate ADS addresses and initialize ADS modules."""
@@ -42,3 +47,27 @@ class IrrigationStation:
         if point_id not in self._points:
             raise ValueError(f"Irrigation point '{point_id}' not found.")
         return self._points[point_id]
+
+    def _start_measurement_timer(self) -> None:
+        """Start the periodic measurement timer."""
+        # Calculate interval to collect rolling_window samples over 5 minutes (300,000 ms)
+        interval_ms = 300_000 // self._config.rolling_window
+        self._measurement_timer.init(
+            period=interval_ms,
+            mode=Timer.PERIODIC,
+            callback=self._set_pending_measurement,
+        )
+        self._logger.log(f"Periodic sensor measurement started (every {interval_ms} ms)")
+
+    def _set_pending_measurement(self, _=None) -> None:
+        self._pending_measurement = True
+
+    def handle_pending_measurement(self) -> None:
+        if self._pending_measurement:
+            self._measure_all_sensors()
+            self._pending_measurement = False
+
+    def _measure_all_sensors(self) -> None:
+        """Measure all sensors to update their rolling averages."""
+        for point in self._points.values():
+            point.measure_sensor()
