@@ -2,8 +2,18 @@
 from machine import Pin, I2C
 import time
 from ads1x15 import ADS1115
+# SENSORS
+# ADDRESS   CHANNELL    MOSFET_PIN
+# 0x48      0           18
+# 0x48      1           19
+# 0x48      2           20
+# 0x48      3           21
+# 0x49      0           22
+# 0x49      1           28
+# 0x49      2           26
+# 0x49      3           27
 
-MOSFET_PIN = 21
+MOSFET_PIN = 28
 
 def read_ads_channels(ads: ADS1115, ads_num: int):
     for ch in range(4):
