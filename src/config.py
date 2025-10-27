@@ -32,7 +32,7 @@ def _clean_string(input: str) -> str:
 
 def _compute_device_id() -> str:
     # Use last 8 hex digits of unique_id for a standard device ID
-    return ''.join(f'{b:02x}' for b in unique_id())[-8:]
+    return "".join(f"{b:02x}" for b in unique_id())[-8:]
 
 
 class NetworkConfig:
@@ -76,7 +76,6 @@ class Config:
             f"station_name:     {self.station_name}",
             "network:",
             f"  wifi_ssid:      {self.network.wifi_ssid}",
-            f"  wifi_password:  {self.network.wifi_password}",
             f"  mqtt_broker_ip: {self.network.mqtt_broker_ip}",
             "irrigation_points:",
         ]
