@@ -3,7 +3,7 @@ from time import sleep
 from logger import Logger
 
 
-class WatchDog:
+class Watchdog:
     def __init__(self, timeout_s: int, logger: Logger):
         self.timeout_ms = timeout_s * 1000
         self.logger = logger

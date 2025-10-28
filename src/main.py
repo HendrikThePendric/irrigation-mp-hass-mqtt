@@ -3,7 +3,7 @@ from time import sleep
 from mqtt_hass_manager import MqttHassManager
 from irrigation_station import IrrigationStation
 from logger import Logger
-from watchdog import WatchDog
+from watchdog import Watchdog
 from config import Config
 from time_keeper import TimeKeeper
 from wifi_manager import WiFiManager
@@ -22,7 +22,7 @@ if PRINT_LOGS:
 def main() -> None:
     # Initialize all components
     logger = Logger(PRINT_LOGS)
-    watchdog = WatchDog(120, logger)
+    watchdog = Watchdog(120, logger)
     time_keeper = TimeKeeper(logger)
     config = Config("./config.json")
     station = IrrigationStation(config, logger)
