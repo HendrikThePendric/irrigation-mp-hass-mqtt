@@ -9,12 +9,14 @@ class IrrigationPoint:
     STATE_OPEN = "open"
     STATE_CLOSED = "closed"
     """Represents a single irrigation point with sensor and valve components."""
-    
-    def __init__(self, config: IrrigationPointConfig, ads: ADS1115, logger: Logger) -> None:
+
+    def __init__(
+        self, config: IrrigationPointConfig, ads: ADS1115, logger: Logger
+    ) -> None:
         """Initialize an irrigation point with its sensor and valve components."""
         self.config = config
         self._logger = logger
-        
+
         # Initialize sensor and valve components
         self._sensor = Sensor(config, ads, logger)
         self._valve = Valve(config, logger)

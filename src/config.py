@@ -40,12 +40,16 @@ def _parse_ads_address(ads_address_str: str) -> int:
     try:
         address = int(ads_address_str, 16)
     except ValueError:
-        raise ValueError(f"Invalid ads_address '{ads_address_str}': must be a valid hexadecimal string (e.g., '0x48')")
-    
+        raise ValueError(
+            f"Invalid ads_address '{ads_address_str}': must be a valid hexadecimal string (e.g., '0x48')"
+        )
+
     valid_addresses = [0x48, 0x49, 0x4A, 0x4B]
     if address not in valid_addresses:
-        raise ValueError(f"Invalid ads_address {hex(address)}: must be one of {', '.join(hex(a) for a in valid_addresses)}")
-    
+        raise ValueError(
+            f"Invalid ads_address {hex(address)}: must be one of {', '.join(hex(a) for a in valid_addresses)}"
+        )
+
     return address
 
 
