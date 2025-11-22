@@ -6,6 +6,8 @@ from logger import Logger
 
 
 class IrrigationPoint:
+    STATE_OPEN = "open"
+    STATE_CLOSED = "closed"
     """Represents a single irrigation point with sensor and valve components."""
     
     def __init__(self, config: IrrigationPointConfig, ads: ADS1115, logger: Logger) -> None:
