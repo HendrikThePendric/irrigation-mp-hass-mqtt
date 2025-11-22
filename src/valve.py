@@ -22,13 +22,13 @@ class Valve:
     
     def open(self) -> None:
         """Open the irrigation valve."""
-        self._valve.value(1)
+        self._valve.on()
         self._state = Valve.STATE_OPEN
         self._logger.log(f"[Valve] {self._name}: Valve opened, sent value 1 to pin {self._pin}")
     
     def close(self) -> None:
         """Close the irrigation valve."""
-        self._valve.value(0)
+        self._valve.off()
         self._state = Valve.STATE_CLOSED
         self._logger.log(f"[Valve] {self._name}: Valve closed, sent value 0 to pin {self._pin}")
     

@@ -23,14 +23,14 @@ class Sensor:
     def read_value(self) -> float:
         """Read the current soil moisture sensor value (0.0-1.0) using ADS1115."""
         # Power on the sensor
-        self._mosfet.value(1)
+        self._mosfet.on()
         
         # Wait for sensor to stabilize
         sleep_ms(300)
         
         try:
             # Read from ADS1115
-            raw = self._ads.read(rate=4, channel=self._ads_channel)
+            raw = self._ads.read(0, self._ads_channel)
             voltage = self._ads.raw_to_v(raw)
             
             # Normalize to 0.0-1.0 range (assuming 0-5V sensor range)
@@ -49,6 +49,6 @@ class Sensor:
             
         finally:
             # Always power off the sensor
-            self._mosfet.value(0)
+            self._mosfet.off()
         
         return self._value
