@@ -17,7 +17,8 @@ eggs/
 lib/
 lib64/
 parts/
-typings/
+typings/*
+!typings/ads1x15/
 sdist/
 var/
 wheels/
