@@ -3,7 +3,7 @@ from json import load
 from machine import unique_id
 
 
-def get_if_valid(key: str, conf: dict, value_type: type) -> any:  # type: ignore
+def _get_if_valid(key: str, conf: dict, value_type: type) -> any:  # type: ignore
     if key not in conf:
         raise KeyError(f"Config key `{key}` is missing")
 
@@ -35,10 +35,11 @@ def _compute_device_id() -> str:
     return "".join(f"{b:02x}" for b in unique_id())[-8:]
 
 
-def _parse_ads_address(ads_address_str: str) -> int:
-    """Parse and validate ADS1115 address from hex string."""
+def _parse_ads_address(conf: dict) -> int:
+    """Fetch and validate ADS1115 address from config dict."""
+    ads_address_str: str = _get_if_valid("ads_address", conf, str)
     try:
-        address = int(ads_address_str, 16)
+        address = int(ads_address_str.strip(), 16)
     except ValueError:
         raise ValueError(
             f"Invalid ads_address '{ads_address_str}': must be a valid hexadecimal string (e.g., '0x48')"
@@ -53,31 +54,40 @@ def _parse_ads_address(ads_address_str: str) -> int:
     return address
 
 
+def _parse_ads_channel(conf: dict) -> int:
+    """Fetch and validate ADS1115 channel index."""
+    channel: int = _get_if_valid("ads_channel", conf, int)
+    if not 0 <= channel <= 3:
+        raise ValueError(
+            f"Config key `ads_channel` must be between 0 and 3, got {channel}"
+        )
+    return channel
+
+
 class NetworkConfig:
     def __init__(self, conf: dict) -> None:
-        self.wifi_ssid: str = get_if_valid("wifi_ssid", conf, str)
-        self.wifi_password: str = get_if_valid("wifi_password", conf, str)
-        self.mqtt_broker_ip: str = get_if_valid("mqtt_broker_ip", conf, str)
+        self.wifi_ssid: str = _get_if_valid("wifi_ssid", conf, str)
+        self.wifi_password: str = _get_if_valid("wifi_password", conf, str)
+        self.mqtt_broker_ip: str = _get_if_valid("mqtt_broker_ip", conf, str)
 
 
 class IrrigationPointConfig:
     def __init__(self, conf: dict) -> None:
-        self.name: str = get_if_valid("name", conf, str)
-        self.valve_pin: int = get_if_valid("valve_pin", conf, int)
-        self.mosfet_pin: int = get_if_valid("mosfet_pin", conf, int)
-        ads_address_str: str = get_if_valid("ads_address", conf, str)
-        self.ads_address: int = _parse_ads_address(ads_address_str)
-        self.ads_channel: int = get_if_valid("ads_channel", conf, int)
+        self.name: str = _get_if_valid("name", conf, str)
+        self.valve_pin: int = _get_if_valid("valve_pin", conf, int)
+        self.mosfet_pin: int = _get_if_valid("mosfet_pin", conf, int)
+        self.ads_address: int = _parse_ads_address(conf)
+        self.ads_channel: int = _parse_ads_channel(conf)
         self.id: str = _clean_string(self.name)
 
 
 class Config:
     def __init__(self, file_path: str) -> None:
         conf = _load_json_file(file_path)
-        network_conf: dict = get_if_valid("network", conf, dict)
-        irrigation_points_conf: list = get_if_valid("irrigation_points", conf, list)
+        network_conf: dict = _get_if_valid("network", conf, dict)
+        irrigation_points_conf: list = _get_if_valid("irrigation_points", conf, list)
 
-        self.station_name: str = get_if_valid("station_name", conf, str)
+        self.station_name: str = _get_if_valid("station_name", conf, str)
         self.station_id: str = _compute_device_id()
         self.station_mqtt_id: str = (
             f"{_clean_string(self.station_name)}-{self.station_id}"
