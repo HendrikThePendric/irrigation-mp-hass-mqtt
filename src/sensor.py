@@ -40,7 +40,8 @@ class Sensor:
             voltage = self._ads.raw_to_v(raw)
 
             # Normalize to 0.0-1.0 range (assuming 0-5V sensor range)
-            normalized_value = voltage / 5.0
+            # Round to 2 decimal places to handle minor floating-point variations
+            normalized_value = round(voltage / 5.0, 2)
 
             # Validate the computed value is in expected range
             if not (0.0 <= normalized_value <= 1.0):
