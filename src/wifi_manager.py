@@ -16,7 +16,6 @@ class WiFiManager:
         self._wlan = WLAN(STA_IF)
         self._retry_time = 0
         self._timer = Timer(-1)
-        self._connected = False
         self._pending_connection_check = False
 
         country("nl")
@@ -47,7 +46,6 @@ class WiFiManager:
             sleep(RETRY_DELAY)
 
         if self._wlan.status() == 3:
-            self._connected = True
             self._log_connection_info()
         else:
             self._connected = False

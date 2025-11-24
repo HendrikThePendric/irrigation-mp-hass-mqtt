@@ -6,16 +6,13 @@ from logger import Logger
 from irrigation_station import IrrigationStation
 from mqtt_hass_entities import MqttHassSensor, MqttHassValve, MessagerParams
 from ssl import SSLContext, PROTOCOL_TLS_CLIENT
-from time import sleep, ticks_ms
+from time import ticks_ms
 
-MAX_RETRY_TIME = 30
-RETRY_DELAY = 2
 CA_PATH = "./ca_crt.der"
 CERT_PATH = "./irrigationbackyard_crt.der"
 KEY_PATH = "./irrigationbackyard_key.der"
 PORT = 8883
 KEEPALIVE = 60
-PUBLISH_INTERVAL = 240_000
 BROKER_CONNECTIVITY_TEST_INTERVAL = 1800000
 
 
@@ -189,7 +186,7 @@ class MqttHassManager:
 
     def _start_periodic_publish(self) -> None:
         self._timer.init(
-            period=PUBLISH_INTERVAL,
+            period=self._config.publish_interval_ms,
             mode=Timer.PERIODIC,
             callback=self._set_pending_publish,
         )
