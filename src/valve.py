@@ -18,7 +18,7 @@ class Valve:
         self._logger = logger
 
         # Ensure valve is closed initially
-        self._valve.value(0)
+        self._valve.off()
 
     def open(self) -> None:
         """Open the irrigation valve."""

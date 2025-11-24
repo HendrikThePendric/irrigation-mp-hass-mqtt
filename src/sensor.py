@@ -24,7 +24,7 @@ class Sensor:
         )
 
         # Ensure sensor is powered off initially
-        self._mosfet.value(0)
+        self._mosfet.off()
 
     def measure(self) -> None:
         """Measure the sensor and update the rolling average without returning the value."""
@@ -60,7 +60,7 @@ class Sensor:
 
         finally:
             # Always power off the sensor
-            self._mosfet.value(0)
+            self._mosfet.off()
 
     def get_value(self) -> float:
         """Get the current averaged sensor value without measuring."""
