@@ -1,11 +1,10 @@
-from machine import reset, Timer
+from machine import Timer
 from time import sleep
 from network import WLAN, STA_IF
 from rp2 import country
 from config import NetworkConfig
 from logger import Logger
 
-MAX_RETRY_TIME = 30  # seconds
 RETRY_DELAY = 2  # seconds
 CHECK_INTERVAL_MS = 600_000  # milliseconds (10 minutes)
 
@@ -39,7 +38,7 @@ class WiFiManager:
         self._wlan.connect(self._config.wifi_ssid, self._config.wifi_password)
         self._retry_time = 0
 
-        while self._retry_time <= MAX_RETRY_TIME:
+        while True:
             if self._wlan.status() < 0 or self._wlan.status() >= 3:
                 break
             self._logger.log(f"Trying to connect to WiFi ({self._retry_time}s)")
@@ -49,8 +48,8 @@ class WiFiManager:
         if self._wlan.status() == 3:
             self._log_connection_info()
         else:
-            self._logger.log("WiFi connection failed, going to reset")
-            reset()
+            self._connected = False
+            self._logger.log("WiFi connection failed")
 
     def _log_connection_info(self) -> None:
         """Log the WiFi connection details."""

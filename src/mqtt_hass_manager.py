@@ -1,5 +1,6 @@
 from machine import Timer
 from mqtt_robust_client import MqttRobustClient
+from umqtt.simple import MQTTClient
 from config import Config
 from logger import Logger
 from irrigation_station import IrrigationStation
@@ -38,7 +39,9 @@ class MqttHassManager:
         self._pending_reconnect = False
         self._pending_broker_connectivity_test = False
         self._availability_topic = f"irrigation/{self._config.station_id}/availability"
-        self._broker_connectivity_topic = f"irrigation/{self._config.station_id}/broker_connectivity"
+        self._broker_connectivity_topic = (
+            f"irrigation/{self._config.station_id}/broker_connectivity"
+        )
         self._sensor_messagers = []
         self._valve_messagers = []
         self._command_topic_to_valve = {}
@@ -56,7 +59,7 @@ class MqttHassManager:
             keepalive=KEEPALIVE,
             ssl=create_ssl_context(),
             logger=self._logger,
-            on_reconnect_callback=self._on_reconnect_callback
+            on_reconnect_callback=self._on_reconnect_callback,
         )
 
     def setup(self) -> None:
@@ -75,18 +78,20 @@ class MqttHassManager:
         if self._pending_broker_connectivity_test:
             self._handle_pending_broker_connectivity_test()
             self._pending_broker_connectivity_test = False
-        
+
         if self._pending_reconnect:
             self._handle_pending_reconnect()
             self._pending_reconnect = False
-        
+
         if self._pending_publish:
             for sensor_messager in self._sensor_messagers:
                 sensor_messager.publish_moisture_level()
             self._pending_publish = False
 
     def _handle_pending_reconnect(self) -> None:
-        self._logger.log("Reconnected to MQTT - restoring availability and subscriptions")
+        self._logger.log(
+            "Reconnected to MQTT - restoring availability and subscriptions"
+        )
         self._set_online()
         self._resubscribe_after_reconnect()
 
@@ -95,11 +100,11 @@ class MqttHassManager:
         try:
             # Resubscribe to Home Assistant status
             self._client.subscribe("homeassistant/status", qos=0)
-            
+
             # Resubscribe to all valve command topics
             for valve_messager in self._valve_messagers:
                 valve_messager.subscribe_to_command_topic()
-                
+
             self._logger.log("Resubscribed to all command topics after reconnection")
         except Exception as e:
             self._logger.log(f"Failed to resubscribe after reconnection: {e}")
@@ -107,7 +112,7 @@ class MqttHassManager:
     def _handle_pending_broker_connectivity_test(self) -> None:
         current_time = ticks_ms()
         test_payload = f"broker_connectivity_test_{current_time}"
-        
+
         self._client.publish(self._broker_connectivity_topic, test_payload, qos=1)
         self._logger.log(f"Broker connectivity test acknowledged: {test_payload}")
 
@@ -118,14 +123,16 @@ class MqttHassManager:
             lwt_topic=self._availability_topic,
             lwt_msg="offline",
             lwt_retain=True,
-            lwt_qos=0
+            lwt_qos=0,
         )
 
-        message = "\n".join([
-            "Connected to MQTT Broker:",
-            f"Address:   {self._config.network.mqtt_broker_ip}:{PORT}",
-            f"Client ID: {self._config.station_mqtt_id}",
-        ])
+        message = "\n".join(
+            [
+                "Connected to MQTT Broker:",
+                f"Address:   {self._config.network.mqtt_broker_ip}:{PORT}",
+                f"Client ID: {self._config.station_mqtt_id}",
+            ]
+        )
         self._logger.log(message)
 
     def _set_online(self) -> None:
@@ -165,11 +172,11 @@ class MqttHassManager:
     def _handle_message(self, topic_bytes: bytes, msg_bytes: bytes) -> None:
         topic = topic_bytes.decode()
         msg = msg_bytes.decode()
-        
+
         if topic == "homeassistant/status":
             self._handle_ha_status_message(msg)
             return
-        
+
         valve_messager = self._command_topic_to_valve.get(topic)
         if valve_messager:
             try:
@@ -215,12 +222,12 @@ class MqttHassManager:
     def _republish_after_ha_restart(self) -> None:
         try:
             self._client.publish(self._availability_topic, "online", retain=True)
-            
+
             for sensor_messager in self._sensor_messagers:
                 sensor_messager.publish_discovery_message()
-                
+
             for valve_messager in self._valve_messagers:
                 valve_messager.publish_discovery_message()
-                
+
         except Exception as e:
             self._logger.log(f"Failed to republish after HA online: {e}")

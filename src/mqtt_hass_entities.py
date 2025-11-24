@@ -71,7 +71,7 @@ class MqttHassSensor(MqttHassEntity):
         }
         self._client.publish(discovery_topic, dumps(payload), retain=True)
         self._log_discovery_message(discovery_topic, payload)
-        # Also publish state after discovery message so the sensor has a value from the start        
+        # Also publish state after discovery message so the sensor has a value from the start
         self.publish_moisture_level()
 
     def publish_moisture_level(self) -> None:
@@ -84,8 +84,12 @@ class MqttHassSensor(MqttHassEntity):
 class MqttHassValve(MqttHassEntity):
     def __init__(self, params: MessagerParams) -> None:
         super().__init__(params)
-        self._state_topic: str = f"irrigation/{params.station_id}/{params.irrigation_point.config.id}/valve/state"
-        self._command_topic: str = f"irrigation/{params.station_id}/{params.irrigation_point.config.id}/valve/set"
+        self._state_topic: str = (
+            f"irrigation/{params.station_id}/{params.irrigation_point.config.id}/valve/state"
+        )
+        self._command_topic: str = (
+            f"irrigation/{params.station_id}/{params.irrigation_point.config.id}/valve/set"
+        )
         self.publish_discovery_message()
 
     def publish_discovery_message(self) -> None:

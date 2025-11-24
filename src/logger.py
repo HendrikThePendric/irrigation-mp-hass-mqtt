@@ -1,5 +1,6 @@
 from typing import Callable
-from os import rename, stat
+from os import rename, stat, sync
+import sys
 
 
 LOG_FILE_PATH = "./log.txt"
@@ -22,11 +23,13 @@ class Logger:
     def log(self, msg: str) -> None:
         """Log a message to file and optionally print it."""
         log_msg: str = self._format_msg(msg)
-        with open(LOG_FILE_PATH, "a") as curr_file:
-            curr_file.write(log_msg + "\n")
 
         if self._should_print:
             print(log_msg)
+
+        with open(LOG_FILE_PATH, "a") as curr_file:
+            curr_file.write(log_msg + "\n")
+            sync()
 
         self._rotate_file_if_needed()
 
@@ -57,6 +60,7 @@ class Logger:
                 msg = self._format_msg("Rotated log file")
                 with open(LOG_FILE_PATH, "a") as curr_file:
                     curr_file.write(msg + "\n")
+                    sync()
                 if self._should_print:
                     print(msg)
         except OSError as e:
