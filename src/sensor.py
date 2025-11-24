@@ -3,6 +3,7 @@ from ads1x15 import ADS1115
 from time import sleep_ms
 from config import IrrigationPointConfig
 from logger import Logger
+from rolling_average import RollingAverage
 
 
 class Sensor:
@@ -16,14 +17,17 @@ class Sensor:
         self._mosfet = Pin(config.mosfet_pin, Pin.OUT)
         self._ads_channel = config.ads_channel
         self._logger = logger
-        self._value = 0.5
+        self._value = 0.5  # Initial averaged value
         self._ads = ads
+        self._rolling_avg = RollingAverage(
+            window_size=config.rolling_window, alpha=config.ema_alpha
+        )
 
         # Ensure sensor is powered off initially
-        self._mosfet.value(0)
+        self._mosfet.off()
 
-    def read_value(self) -> float:
-        """Read the current soil moisture sensor value (0.0-1.0) using ADS1115."""
+    def measure(self) -> None:
+        """Measure the sensor and update the rolling average without returning the value."""
         # Power on the sensor
         self._mosfet.on()
 
@@ -36,7 +40,8 @@ class Sensor:
             voltage = self._ads.raw_to_v(raw)
 
             # Normalize to 0.0-1.0 range (assuming 0-5V sensor range)
-            normalized_value = voltage / 5.0
+            # Round to 2 decimal places to handle minor floating-point variations
+            normalized_value = round(voltage / 5.0, 2)
 
             # Validate the computed value is in expected range
             if not (0.0 <= normalized_value <= 1.0):
@@ -44,17 +49,20 @@ class Sensor:
                     f"Computed sensor value {normalized_value} is outside valid range [0.0, 1.0]"
                 )
 
-            self._value = normalized_value
+            self._rolling_avg.add_reading(normalized_value)
+            self._value = self._rolling_avg.get_average()
 
         except Exception as e:
             self._logger.log(f"[Sensor] {self._name}: Error reading sensor - {e}")
             self._logger.log(
-                f"[Sensor] {self._name}: Using last known value {self._value}"
+                f"[Sensor] {self._name}: Using last known averaged value {self._value}"
             )
-            # Keep the last known value on error
+            # Keep the last averaged value on error
 
         finally:
             # Always power off the sensor
             self._mosfet.off()
 
+    def get_value(self) -> float:
+        """Get the current averaged sensor value without measuring."""
         return self._value

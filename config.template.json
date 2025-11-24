@@ -5,6 +5,9 @@
     "wifi_password": "Netowrk password",
     "mqtt_broker_ip": "###.###.##.##"
   },
+  "rolling_window": 3,
+  "ema_alpha": 0.2,
+  "publish_interval_minutes": 5,
   "irrigation_points": [
     {
       "name": "Location A",

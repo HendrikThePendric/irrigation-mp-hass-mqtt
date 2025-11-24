@@ -22,8 +22,12 @@ class IrrigationPoint:
         self._valve = Valve(config, logger)
 
     def get_sensor_value(self) -> float:
-        """Read the current soil moisture sensor value (0.0-1.0)."""
-        return self._sensor.read_value()
+        """Get the current averaged soil moisture sensor value (0.0-1.0)."""
+        return self._sensor.get_value()
+
+    def measure_sensor(self) -> None:
+        """Measure the sensor and update the rolling average without returning the value."""
+        self._sensor.measure()
 
     def open_valve(self) -> None:
         """Open the irrigation valve for this point."""
