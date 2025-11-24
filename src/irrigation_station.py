@@ -8,11 +8,12 @@ from logger import Logger
 class IrrigationStation:
     """Manages multiple irrigation points and their shared resources."""
 
-    def __init__(self, config: Config, logger: Logger) -> None:
+    def __init__(self, config: Config, logger: Logger, mqtt_hass_manager) -> None:
         """Initialize the irrigation station with all configured points."""
         self._config = config
         self._points: dict[str, IrrigationPoint] = {}
         self._logger = logger
+        self._mqtt_hass_manager = mqtt_hass_manager
         self._measurement_timer = Timer(-1)
         self._pending_measurement = False
         # Initialize I2C bus (shared for all ADS modules)
@@ -53,6 +54,54 @@ class IrrigationStation:
         if point_id not in self._points:
             raise ValueError(f"Irrigation point '{point_id}' not found.")
         return self._points[point_id]
+
+    def handle_pending_tasks(self) -> None:
+        """Handle all pending tasks in sequence: check messages, read received messages, take sensor readings, open/close valves, send messages."""
+        # Check for new messages
+        self._mqtt_hass_manager.check_msg()
+        
+        # Read and process received messages
+        received_messages = self._mqtt_hass_manager.read_received_messages()
+        self._process_received_messages(received_messages)
+        
+        # Take sensor readings
+        self.handle_pending_measurement()
+        
+        # Open/close valves (handled in _process_received_messages)
+        # Send corresponding messages (handled in _process_received_messages)
+
+    def _process_received_messages(self, messages: list[tuple[str, str]]) -> None:
+        """Process received MQTT messages and handle valve commands with exclusivity."""
+        for topic, payload in messages:
+            if topic.startswith(f"irrigation/{self._config.station_id}/") and "/valve/set" in topic:
+                point_id = topic.split("/")[2]  # Extract point_id from topic
+                if point_id in self._points:
+                    action = payload.strip().lower()
+                    if action == IrrigationPoint.STATE_OPEN:
+                        self._open_valve_exclusive(point_id)
+                    elif action == IrrigationPoint.STATE_CLOSED:
+                        self._points[point_id].close_valve()
+                        self._send_valve_state_message(point_id)
+                    else:
+                        self._logger.log(f"Unknown valve command: {action} for {point_id}")
+
+    def _open_valve_exclusive(self, point_id: str) -> None:
+        """Open the specified valve, closing all others first."""
+        # Close all other open valves
+        for pid, point in self._points.items():
+            if pid != point_id and point.get_valve_state() == IrrigationPoint.STATE_OPEN:
+                point.close_valve()
+                self._send_valve_state_message(pid)
+        
+        # Open the requested valve
+        self._points[point_id].open_valve()
+        self._send_valve_state_message(point_id)
+
+    def _send_valve_state_message(self, point_id: str) -> None:
+        """Send the current state of the specified valve via MQTT."""
+        state = self._points[point_id].get_valve_state()
+        topic = f"irrigation/{self._config.station_id}/{point_id}/valve/state"
+        self._mqtt_hass_manager.send_message(topic, state)
 
     def _start_measurement_timer(self) -> None:
         """Start the periodic measurement timer."""

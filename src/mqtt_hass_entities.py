@@ -13,7 +13,8 @@ MessagerParams = namedtuple(
     [
         "mqtt_client",
         "station_id",
-        "irrigation_point",
+        "point_id",  # Point ID as string instead of full object
+        "point_config",  # Point config for discovery
         "device_info",
         "availability_topic",
         "logger",
@@ -25,7 +26,8 @@ class MqttHassEntity:
     def __init__(self, params: "MessagerParams") -> None:
         self._client: MQTTClient = params.mqtt_client
         self._station_id: str = params.station_id
-        self._point: IrrigationPoint = params.irrigation_point
+        self._point_id: str = params.point_id
+        self._point_config = params.point_config
         self._device_info: Dict[str, Any] = params.device_info
         self._availability_topic: str = params.availability_topic
         self._logger: Logger = params.logger
@@ -50,17 +52,17 @@ class MqttHassSensor(MqttHassEntity):
     def __init__(self, params: MessagerParams) -> None:
         super().__init__(params)
         self._state_topic: str = (
-            f"irrigation/{params.station_id}/{params.irrigation_point.config.id}/sensor"
+            f"irrigation/{params.station_id}/{params.point_id}/sensor"
         )
         self.publish_discovery_message()
 
     def publish_discovery_message(self) -> None:
         discovery_topic: str = (
-            f"homeassistant/sensor/{self._station_id}-{self._point.config.id}/config"
+            f"homeassistant/sensor/{self._station_id}-{self._point_id}/config"
         )
         payload: Dict[str, Any] = {
-            "name": f"{self._point.config.name} Moisture",
-            "unique_id": f"{self._point.config.id}_sensor",
+            "name": f"{self._point_config.name} Moisture",
+            "unique_id": f"{self._point_id}_sensor",
             "device_class": "moisture",
             "state_class": "measurement",
             "unit_of_measurement": "%",
@@ -71,34 +73,31 @@ class MqttHassSensor(MqttHassEntity):
         }
         self._client.publish(discovery_topic, dumps(payload), retain=True)
         self._log_discovery_message(discovery_topic, payload)
-        # Also publish state after discovery message so the sensor has a value from the start
-        self.publish_moisture_level()
+        # Note: Sensor state publishing is now handled in IrrigationStation
 
     def publish_moisture_level(self) -> None:
-        value: float = self._point.get_sensor_value()
-        payload: str = dumps({"moisture": round(value * 100, 2)})
-        self._client.publish(self._state_topic, payload)
-        self._logger.log(f"{self._state_topic}::{payload}")
+        # Note: This method is no longer used since sensor publishing is handled in IrrigationStation
+        pass
 
 
 class MqttHassValve(MqttHassEntity):
     def __init__(self, params: MessagerParams) -> None:
         super().__init__(params)
         self._state_topic: str = (
-            f"irrigation/{params.station_id}/{params.irrigation_point.config.id}/valve/state"
+            f"irrigation/{params.station_id}/{params.point_id}/valve/state"
         )
         self._command_topic: str = (
-            f"irrigation/{params.station_id}/{params.irrigation_point.config.id}/valve/set"
+            f"irrigation/{params.station_id}/{params.point_id}/valve/set"
         )
         self.publish_discovery_message()
 
     def publish_discovery_message(self) -> None:
         discovery_topic: str = (
-            f"homeassistant/valve/{self._station_id}-{self._point.config.id}/config"
+            f"homeassistant/valve/{self._station_id}-{self._point_id}/config"
         )
         payload: Dict[str, Any] = {
-            "name": f"{self._point.config.name} Valve",
-            "unique_id": f"{self._point.config.id}_valve",
+            "name": f"{self._point_config.name} Valve",
+            "unique_id": f"{self._point_id}_valve",
             "state_topic": self._state_topic,
             "command_topic": self._command_topic,
             "payload_open": "open",
@@ -112,30 +111,16 @@ class MqttHassValve(MqttHassEntity):
         }
         self._client.publish(discovery_topic, dumps(payload), retain=True)
         self._log_discovery_message(discovery_topic, payload)
-        # Also publish state after discovery message so the valve has a correct initial state
-        self.publish_valve_state()
+        # Note: Valve state publishing is now handled in IrrigationStation
 
     def publish_valve_state(self) -> None:
-        state = self._point.get_valve_state()
-        # Only allow IrrigationPoint.STATE_OPEN or STATE_CLOSED for Home Assistant
-        if state not in (IrrigationPoint.STATE_OPEN, IrrigationPoint.STATE_CLOSED):
-            raise ValueError(
-                f"Valve state '{state}' is invalid. Must be '{IrrigationPoint.STATE_OPEN}' or '{IrrigationPoint.STATE_CLOSED}'"
-            )
-        self._client.publish(self._state_topic, state, retain=True)
-        self._logger.log(f"{self._state_topic}::{state}")
+        # Note: This method is no longer used since valve publishing is handled in IrrigationStation
+        pass
 
     def subscribe_to_command_topic(self) -> None:
         self._client.subscribe(self._command_topic)
         self._logger.log(f"Subscribed::{self._command_topic}")
 
     def handle_command_message(self, msg: str) -> None:
-        self._logger.log(f"{self._command_topic}::{msg}")
-        action = msg.strip().lower()
-        if action == IrrigationPoint.STATE_OPEN:
-            self._point.open_valve()
-        elif action == IrrigationPoint.STATE_CLOSED:
-            self._point.close_valve()
-        else:
-            raise ValueError(f"Unknown valve command: {action}")
-        self.publish_valve_state()
+        # Note: This method is no longer used since command handling is moved to IrrigationStation
+        pass

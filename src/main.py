@@ -25,9 +25,9 @@ def main() -> None:
     watchdog = Watchdog(120, logger)
     time_keeper = TimeKeeper(logger)
     config = Config("./config.json")
-    station = IrrigationStation(config, logger)
+    mqtt_manager = MqttHassManager(config, logger)
+    station = IrrigationStation(config, logger, mqtt_manager)
     wifi_manager = WiFiManager(config.network, logger)
-    mqtt_manager = MqttHassManager(config, logger, station)
 
     # Setup components
     logger.log(str(config))
@@ -45,10 +45,8 @@ def main() -> None:
         while True:
             watchdog.feed()
             wifi_manager.handle_pending_connection_check()
-            mqtt_manager.check_msg()
             time_keeper.handle_pending_ntp_sync()
-            mqtt_manager.handle_pending_messages()
-            station.handle_pending_measurement()
+            station.handle_pending_tasks()
 
             loop_count += 1
 
