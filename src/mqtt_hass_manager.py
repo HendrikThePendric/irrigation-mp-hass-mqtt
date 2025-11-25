@@ -73,19 +73,18 @@ class MqttHassManager:
     def check_msg(self) -> None:
         self._client.check_msg()
 
-    def handle_pending_messages(self) -> None:
-        if self._pending_broker_connectivity_test:
-            self._handle_pending_broker_connectivity_test()
-            self._pending_broker_connectivity_test = False
+    def process_messages(self) -> None:
+        """Process incoming MQTT messages and store them."""
+        self.check_msg()
 
-        if self._pending_reconnect:
-            self._handle_pending_reconnect()
-            self._pending_reconnect = False
+    def get_station_instructions(self) -> list[tuple[str, str]]:
+        """Return and clear the list of received messages as station instructions."""
+        return self.read_received_messages()
 
-        if self._pending_publish:
-            for sensor_messager in self._sensor_messagers:
-                sensor_messager.publish_moisture_level()
-            self._pending_publish = False
+    def send_status_updates(self, status_updates: list[tuple[str, str]]) -> None:
+        """Send status updates via MQTT."""
+        for topic, payload in status_updates:
+            self.send_message(topic, payload)
 
     def _handle_pending_reconnect(self) -> None:
         self._logger.log(
@@ -181,7 +180,7 @@ class MqttHassManager:
     def _handle_message(self, topic_bytes: bytes, msg_bytes: bytes) -> None:
         topic = topic_bytes.decode()
         msg = msg_bytes.decode()
-        
+
         # Store received messages for later processing
         self._received_messages.append((topic, msg))
 
