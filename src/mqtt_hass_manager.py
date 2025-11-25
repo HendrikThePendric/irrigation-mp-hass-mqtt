@@ -28,16 +28,15 @@ class MqttHassManager:
         self,
         config: Config,
         logger: Logger,
-        station: IrrigationStation,
     ) -> None:
         self._config = config
         self._logger = logger
-        self._station = station
         self._timer = Timer(-1)
         self._broker_connectivity_timer = Timer(-1)
         self._pending_publish = False
         self._pending_reconnect = False
         self._pending_broker_connectivity_test = False
+        self._received_messages: list[tuple[str, str]] = []
         self._availability_topic = f"irrigation/{self._config.station_id}/availability"
         self._broker_connectivity_topic = (
             f"irrigation/{self._config.station_id}/broker_connectivity"
@@ -74,19 +73,18 @@ class MqttHassManager:
     def check_msg(self) -> None:
         self._client.check_msg()
 
-    def handle_pending_messages(self) -> None:
-        if self._pending_broker_connectivity_test:
-            self._handle_pending_broker_connectivity_test()
-            self._pending_broker_connectivity_test = False
+    def process_messages(self) -> None:
+        """Process incoming MQTT messages and store them."""
+        self.check_msg()
 
-        if self._pending_reconnect:
-            self._handle_pending_reconnect()
-            self._pending_reconnect = False
+    def get_station_instructions(self) -> list[tuple[str, str]]:
+        """Return and clear the list of received messages as station instructions."""
+        return self.read_received_messages()
 
-        if self._pending_publish:
-            for sensor_messager in self._sensor_messagers:
-                sensor_messager.publish_moisture_level()
-            self._pending_publish = False
+    def send_status_updates(self, status_updates: list[tuple[str, str]]) -> None:
+        """Send status updates via MQTT."""
+        for topic, payload in status_updates:
+            self.send_message(topic, payload)
 
     def _handle_pending_reconnect(self) -> None:
         self._logger.log(
@@ -115,6 +113,17 @@ class MqttHassManager:
 
         self._client.publish(self._broker_connectivity_topic, test_payload, qos=1)
         self._logger.log(f"Broker connectivity test acknowledged: {test_payload}")
+
+    def read_received_messages(self) -> list[tuple[str, str]]:
+        """Return and clear the list of received messages."""
+        messages = self._received_messages[:]
+        self._received_messages.clear()
+        return messages
+
+    def send_message(self, topic: str, payload: str) -> None:
+        """Send a message via MQTT."""
+        self._client.publish(topic, payload, retain=True)
+        self._logger.log(f"Sent message: {topic} :: {payload}")
 
     def _connect(self) -> None:
         self._client.connect(
@@ -145,13 +154,12 @@ class MqttHassManager:
         self._pending_reconnect = True
 
     def _setup_entities(self) -> None:
-        for _, point in self._config.irrigation_points.items():
-            irrigation_point = self._station.get_point(point.id)
-
+        for point_id, point_config in self._config.irrigation_points.items():
             params = MessagerParams(
                 mqtt_client=self._client,
                 station_id=self._config.station_id,
-                irrigation_point=irrigation_point,
+                point_id=point_id,
+                point_config=point_config,
                 device_info=self._device_info,
                 availability_topic=self._availability_topic,
                 logger=self._logger,
@@ -173,16 +181,14 @@ class MqttHassManager:
         topic = topic_bytes.decode()
         msg = msg_bytes.decode()
 
+        # Store received messages for later processing
+        self._received_messages.append((topic, msg))
+
         if topic == "homeassistant/status":
             self._handle_ha_status_message(msg)
             return
 
-        valve_messager = self._command_topic_to_valve.get(topic)
-        if valve_messager:
-            try:
-                valve_messager.handle_command_message(msg)
-            except Exception as e:
-                self._logger.log(f"Error handling command message for {topic}: {e}")
+        # Note: Valve command handling is now done in IrrigationStation
 
     def _start_periodic_publish(self) -> None:
         self._timer.init(
