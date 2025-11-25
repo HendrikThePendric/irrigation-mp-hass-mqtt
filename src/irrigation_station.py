@@ -56,21 +56,6 @@ class IrrigationStation:
             raise ValueError(f"Irrigation point '{point_id}' not found.")
         return self._points[point_id]
 
-    def handle_pending_tasks(self) -> None:
-        """Handle all pending tasks in sequence: check messages, read received messages, take sensor readings, open/close valves, send messages."""
-        # Check for new messages
-        self._mqtt_hass_manager.check_msg()
-
-        # Read and process received messages
-        received_messages = self._mqtt_hass_manager.read_received_messages()
-        self._process_instructions(received_messages)
-
-        # Take sensor readings
-        self.handle_pending_measurement()
-
-        # Open/close valves (handled in _process_instructions)
-        # Send corresponding messages (handled in _process_instructions)
-
     def provide_instructions(self, instructions: list[tuple[str, str]]) -> None:
         """Receive instructions from MQTT manager."""
         self._pending_instructions = instructions
