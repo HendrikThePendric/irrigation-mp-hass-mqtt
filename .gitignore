@@ -180,3 +180,5 @@ certs/
 
 log.txt
 log-old.txt
+micropython-build
+micropython-local
