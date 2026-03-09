@@ -247,18 +247,23 @@ def test_hardware() -> bool:
 
 ### Current Test Coverage
 
-#### ✅ Working Tests
-- `rolling_average.py`: Rolling average and EMA calculations
-- `valve.py`: Valve control with mocked `machine.Pin`
+#### ✅ Test Framework
 
-#### 🔧 Ready to Test Next
-- `sensor.py`: Soil moisture sensor with ADS1115 mock
-- `irrigation_point.py`: Complete irrigation point logic
-- `mqtt_hass_manager.py`: MQTT integration with mocked network
+All test files use MicroPython's unittest framework:
+
+- `test_config.py`: Configuration parsing and validation
+- `test_logger.py`: Logging utilities with file I/O mocking
+- `test_rolling_average.py`: Rolling average and EMA calculations
+- `test_valve.py`: Valve control with mocked `machine.Pin`
+- `test_sensor.py`: Soil moisture sensor with ADS1115 mock
+- `test_irrigation_point.py`: Complete irrigation point logic
+- `test_irrigation_station.py`: Station management with multiple points
+- `test_time_keeper.py`: Time synchronization and scheduling
+- `test_watchdog.py`: System watchdog with timer mocking
 
 ### unittest Framework Support
 
-The project supports **MicroPython's unittest framework**. The `setup.sh` script automatically installs it.
+The project uses **MicroPython's unittest framework** exclusively. The `setup_micropython_test_env.sh` script automatically installs it.
 
 **Example unittest test:**
 ```python
@@ -280,7 +285,7 @@ if __name__ == "__main__":
     unittest.main()
 ```
 
-The test runner (`tests/run_tests.py`) automatically detects and runs both simple tests and unittest tests.
+The test runner (`tests/run_tests.py`) runs all tests in the MicroPython interpreter.
 
 ### Validation Steps (Hardware)
 1. Run hardware tests to verify connections

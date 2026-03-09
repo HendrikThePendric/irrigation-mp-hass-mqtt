@@ -1,4 +1,4 @@
-"""Test irrigation_point.py using simple mocks."""
+"""Test irrigation_point.py using unittest framework."""
 
 import sys
 
@@ -61,6 +61,8 @@ sys.modules["ads1x15"] = ADS1115Module()
 # Now import the modules to test
 from irrigation_point import IrrigationPoint  # type: ignore
 
+import unittest
+
 
 class MockConfig:
     """Mock IrrigationPointConfig."""
@@ -84,160 +86,90 @@ class MockLogger:
         self.messages.append(msg)
 
 
-def test_irrigation_point_initialization() -> bool:
-    """Test irrigation point initialization."""
-    print("Testing irrigation point initialization...")
+class TestIrrigationPoint(unittest.TestCase):
+    """Test irrigation_point.py using unittest framework."""
 
-    config = MockConfig("Test Point", 2, 21, 0)
-    ads = ADS1115Module.ADS1115()
-    logger = MockLogger()
+    def setUp(self) -> None:
+        """Reset mock state before each test."""
+        mock_machine.pins_created.clear()
 
-    # Create irrigation point
-    point = IrrigationPoint(config, ads, logger)  # type: ignore
+    def test_irrigation_point_initialization(self) -> None:
+        """Test irrigation point initialization."""
+        config = MockConfig("Test Point", 2, 21, 0)
+        ads = ADS1115Module.ADS1115()
+        logger = MockLogger()
 
-    # Check that config and logger are stored
-    if point.config != config:
-        print(f"  ❌ Config not stored correctly")
-        return False
+        # Create irrigation point
+        point = IrrigationPoint(config, ads, logger)  # type: ignore
 
-    if point._logger != logger:
-        print(f"  ❌ Logger not stored correctly")
-        return False
+        # Check that config and logger are stored
+        self.assertEqual(point.config, config)
+        self.assertEqual(point._logger, logger)
 
-    print("  ✅ Irrigation point initialization test passed")
-    return True
+    def test_irrigation_point_get_sensor_value(self) -> None:
+        """Test getting sensor value from irrigation point."""
+        config = MockConfig("Test Point", 2, 21, 0)
+        ads = ADS1115Module.ADS1115()
+        logger = MockLogger()
 
+        # Create irrigation point
+        point = IrrigationPoint(config, ads, logger)  # type: ignore
 
-def test_irrigation_point_get_sensor_value() -> bool:
-    """Test getting sensor value from irrigation point."""
-    print("Testing get_sensor_value()...")
-
-    config = MockConfig("Test Point", 2, 21, 0)
-    ads = ADS1115Module.ADS1115()
-    logger = MockLogger()
-
-    # Create irrigation point
-    point = IrrigationPoint(config, ads, logger)  # type: ignore
-
-    # Mock the sensor's get_value method
-    # We need to patch the sensor's get_value to return a known value
-    # Since we can't easily mock the Sensor class, we'll test the integration
-    # by checking that the method exists and can be called
-    try:
+        # Mock the sensor's get_value method
+        # We need to patch the sensor's get_value to return a known value
+        # Since we can't easily mock the Sensor class, we'll test the integration
+        # by checking that the method exists and can be called
         value = point.get_sensor_value()
         # Default value should be 0.5 (from Sensor.__init__)
-        if value != 0.5:
-            print(f"  ❌ Expected sensor value 0.5, got {value}")
-            return False
-    except Exception as e:
-        print(f"  ❌ Error calling get_sensor_value: {e}")
-        return False
+        self.assertEqual(value, 0.5)
 
-    print("  ✅ get_sensor_value() test passed")
-    return True
+    def test_irrigation_point_valve_operations(self) -> None:
+        """Test valve operations through irrigation point."""
+        config = MockConfig("Test Point", 2, 21, 0)
+        ads = ADS1115Module.ADS1115()
+        logger = MockLogger()
 
+        # Reset mock pins
+        mock_machine.pins_created.clear()
 
-def test_irrigation_point_valve_operations() -> bool:
-    """Test valve operations through irrigation point."""
-    print("Testing valve operations...")
+        # Create irrigation point
+        point = IrrigationPoint(config, ads, logger)  # type: ignore
 
-    config = MockConfig("Test Point", 2, 21, 0)
-    ads = ADS1115Module.ADS1115()
-    logger = MockLogger()
+        # Test opening valve
+        point.open_valve()
 
-    # Reset mock pins
-    mock_machine.pins_created.clear()
+        # Check that a pin was created for the valve
+        self.assertTrue(len(mock_machine.pins_created) > 0)
 
-    # Create irrigation point
-    point = IrrigationPoint(config, ads, logger)  # type: ignore
+        # Check valve state
+        state = point.get_valve_state()
+        self.assertEqual(state, "open")
 
-    # Test opening valve
-    point.open_valve()
+        # Test closing valve
+        point.close_valve()
 
-    # Check that a pin was created for the valve
-    if len(mock_machine.pins_created) == 0:
-        print(f"  ❌ No pin created for valve")
-        return False
+        # Check valve state
+        state = point.get_valve_state()
+        self.assertEqual(state, "closed")
 
-    # Check valve state
-    state = point.get_valve_state()
-    if state != "open":
-        print(f"  ❌ Valve state should be 'open' after open_valve(), got {state}")
-        return False
+    def test_irrigation_point_measure_sensor(self) -> None:
+        """Test measure_sensor method."""
+        config = MockConfig("Test Point", 2, 21, 0)
+        ads = ADS1115Module.ADS1115()
+        logger = MockLogger()
 
-    # Test closing valve
-    point.close_valve()
+        # Reset mock pins
+        mock_machine.pins_created.clear()
 
-    # Check valve state
-    state = point.get_valve_state()
-    if state != "closed":
-        print(f"  ❌ Valve state should be 'closed' after close_valve(), got {state}")
-        return False
+        # Create irrigation point
+        point = IrrigationPoint(config, ads, logger)  # type: ignore
 
-    print("  ✅ Valve operations test passed")
-    return True
-
-
-def test_irrigation_point_measure_sensor() -> bool:
-    """Test measure_sensor method."""
-    print("Testing measure_sensor()...")
-
-    config = MockConfig("Test Point", 2, 21, 0)
-    ads = ADS1115Module.ADS1115()
-    logger = MockLogger()
-
-    # Reset mock pins
-    mock_machine.pins_created.clear()
-
-    # Create irrigation point
-    point = IrrigationPoint(config, ads, logger)  # type: ignore
-
-    # Test measuring sensor
-    try:
+        # Test measuring sensor
         point.measure_sensor()
         # Should create a pin for the MOSFET
-        if len(mock_machine.pins_created) == 0:
-            print(f"  ❌ No pin created for MOSFET")
-            return False
-    except Exception as e:
-        print(f"  ❌ Error calling measure_sensor: {e}")
-        return False
-
-    print("  ✅ measure_sensor() test passed")
-    return True
-
-
-def main() -> None:
-    """Run all irrigation point tests."""
-    print("=== Testing irrigation_point.py ===")
-
-    passed = 0
-    total = 0
-
-    # Run tests
-    total += 1
-    if test_irrigation_point_initialization():
-        passed += 1
-
-    total += 1
-    if test_irrigation_point_get_sensor_value():
-        passed += 1
-
-    total += 1
-    if test_irrigation_point_valve_operations():
-        passed += 1
-
-    total += 1
-    if test_irrigation_point_measure_sensor():
-        passed += 1
-
-    # Summary
-    print("=" * 40)
-    if passed == total:
-        print("✅ All irrigation point tests passed!")
-    else:
-        print(f"❌ {passed}/{total} tests passed")
+        self.assertTrue(len(mock_machine.pins_created) > 0)
 
 
 if __name__ == "__main__":
-    main()
+    # Run the tests
+    unittest.main()

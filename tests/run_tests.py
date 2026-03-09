@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
-"""Enhanced test runner for MicroPython irrigation system.
+"""Test runner for MicroPython irrigation system.
 
 This runs tests in actual MicroPython interpreter.
-Supports both simple test scripts and unittest framework tests.
+All tests now use unittest framework.
 """
 
 import subprocess
@@ -10,20 +10,9 @@ import sys
 import os.path
 
 
-def is_unittest_test(test_file: str) -> bool:
-    """Check if a test file uses unittest framework."""
-    try:
-        with open(test_file, "r") as f:
-            content = f.read()
-            # Check for unittest imports or usage
-            return "import unittest" in content or "unittest.TestCase" in content
-    except:
-        return False
-
-
-def run_unittest_test(test_file: str) -> bool:
+def run_test(test_file: str) -> bool:
     """Run a unittest test file in MicroPython."""
-    print(f"Running unittest test: {test_file}")
+    print(f"Running test: {test_file}")
 
     # Get the MicroPython binary path
     micropython_bin = "./micropython-local"
@@ -46,45 +35,6 @@ def run_unittest_test(test_file: str) -> bool:
 
         # Check for unittest success indicator
         if "OK" in result.stdout and "FAILED" not in result.stdout:
-            print(f"✅ {test_file} passed (unittest)")
-            return True
-        else:
-            print(f"❌ {test_file} failed (unittest)")
-            return False
-
-    except subprocess.TimeoutExpired:
-        print(f"❌ {test_file} timed out")
-        return False
-    except Exception as e:
-        print(f"❌ {test_file} error: {e}")
-        return False
-
-
-def run_simple_test(test_file: str) -> bool:
-    """Run a simple test file in MicroPython (legacy format)."""
-    print(f"Running simple test: {test_file}")
-
-    # Get the MicroPython binary path
-    micropython_bin = "./micropython-local"
-    if not os.path.exists(micropython_bin):
-        print(f"❌ MicroPython binary not found at {micropython_bin}")
-        print("Run: ./scripts/setup_micropython_test_env.sh")
-        return False
-
-    try:
-        # Run test in MicroPython
-        result = subprocess.run(
-            [micropython_bin, test_file], capture_output=True, text=True, timeout=10
-        )
-
-        # Print output
-        if result.stdout:
-            print(result.stdout)
-        if result.stderr:
-            print(f"Stderr: {result.stderr}")
-
-        # Check for success indicator
-        if "✅" in result.stdout or "PASS" in result.stdout:
             print(f"✅ {test_file} passed")
             return True
         else:
@@ -97,14 +47,6 @@ def run_simple_test(test_file: str) -> bool:
     except Exception as e:
         print(f"❌ {test_file} error: {e}")
         return False
-
-
-def run_micropython_test(test_file: str) -> bool:
-    """Run a test file in MicroPython, detecting test type automatically."""
-    if is_unittest_test(test_file):
-        return run_unittest_test(test_file)
-    else:
-        return run_simple_test(test_file)
 
 
 def main() -> None:
@@ -138,7 +80,7 @@ def main() -> None:
     failed = 0
 
     for test_file in sorted(test_files):
-        if run_micropython_test(test_file):
+        if run_test(test_file):
             passed += 1
         else:
             failed += 1

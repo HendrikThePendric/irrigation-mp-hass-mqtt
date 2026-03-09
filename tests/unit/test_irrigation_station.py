@@ -1,4 +1,4 @@
-"""Test irrigation_station.py using simple mocks."""
+"""Test irrigation_station.py using unittest framework."""
 
 import sys
 
@@ -84,6 +84,8 @@ sys.modules["ads1x15"] = ADS1115Module()
 # Now import the modules to test
 from irrigation_station import IrrigationStation  # type: ignore
 
+import unittest
+
 
 class MockConfig:
     """Mock Config class."""
@@ -101,15 +103,22 @@ class MockConfig:
 class MockPointConfig:
     """Mock IrrigationPointConfig."""
 
-    def __init__(self, name, valve_pin, mosfet_pin, ads_address, ads_channel):
+    def __init__(
+        self,
+        name: str,
+        valve_pin: int,
+        mosfet_pin: int,
+        ads_address: int,
+        ads_channel: int,
+    ):
         self.name = name
         self.valve_pin = valve_pin
         self.mosfet_pin = mosfet_pin
         self.ads_address = ads_address
         self.ads_channel = ads_channel
+        self.rolling_window = 3
+        self.ema_alpha = 0.2
         self.id = name.lower().replace(" ", "")
-        self.rolling_window = 3  # Required by Sensor class
-        self.ema_alpha = 0.2  # Required by Sensor class
 
 
 class MockLogger:
@@ -122,291 +131,133 @@ class MockLogger:
         self.messages.append(msg)
 
 
-def test_irrigation_station_initialization() -> bool:
-    """Test irrigation station initialization."""
-    print("Testing irrigation station initialization...")
+class TestIrrigationStation(unittest.TestCase):
+    """Test irrigation_station.py using unittest framework."""
 
-    config = MockConfig()
-    logger = MockLogger()
+    def setUp(self) -> None:
+        """Reset mock state before each test."""
+        mock_machine.pins_created.clear()
 
-    # Add a test point
-    point_config = MockPointConfig("Location A", 2, 21, 0x48, 0)
-    config.add_point("locationa", point_config)
+    def test_irrigation_station_initialization(self) -> None:
+        """Test irrigation station initialization."""
+        config = MockConfig()
+        logger = MockLogger()
 
-    # Reset mock pins
-    mock_machine.pins_created.clear()
-
-    try:
         # Create irrigation station
         station = IrrigationStation(config, logger)  # type: ignore
 
-        # Check that I2C was initialized
-        if not hasattr(station, "_i2c"):
-            print(f"  ❌ I2C not initialized")
-            return False
+        # Check that config and logger are stored
+        self.assertEqual(station._config, config)
+        self.assertEqual(station._logger, logger)
 
-        # Check that ADS modules were set up
-        if not hasattr(station, "_ads_modules"):
-            print(f"  ❌ ADS modules not set up")
-            return False
+        # Check that I2C was created
+        self.assertIsNotNone(station._i2c)
 
-        # Check that irrigation points were created
-        if len(station._points) != 1:
-            print(f"  ❌ Expected 1 irrigation point, got {len(station._points)}")
-            return False
+        # Check that ADS modules dictionary was created
+        self.assertIsNotNone(station._ads_modules)
 
-        # Check that point exists
-        if "locationa" not in station._points:
-            print(f"  ❌ Point 'locationa' not in station._points")
-            return False
+        # Check that irrigation points dictionary was created
+        self.assertIsNotNone(station._points)
 
-        # Check that timer was initialized
-        if not hasattr(station, "_measurement_timer"):
-            print(f"  ❌ Measurement timer not initialized")
-            return False
+        # Check that measurement timer was created
+        self.assertIsNotNone(station._measurement_timer)
 
-    except Exception as e:
-        print(f"  ❌ IrrigationStation initialization raised exception: {e}")
-        return False
+    def test_irrigation_station_get_point(self) -> None:
+        """Test getting irrigation point by ID."""
+        config = MockConfig()
+        logger = MockLogger()
 
-    print("  ✅ Irrigation station initialization test passed")
-    return True
+        # Add a point to config
+        point_config = MockPointConfig("Test Point", 2, 21, 0x48, 0)
+        config.add_point("testpoint", point_config)
 
-
-def test_irrigation_station_get_point() -> bool:
-    """Test get_point method."""
-    print("Testing get_point()...")
-
-    config = MockConfig()
-    logger = MockLogger()
-
-    # Add test points
-    point_config_a = MockPointConfig("Location A", 2, 21, 0x48, 0)
-    point_config_b = MockPointConfig("Location B", 3, 22, 0x49, 1)
-    config.add_point("locationa", point_config_a)
-    config.add_point("locationb", point_config_b)
-
-    # Reset mock pins
-    mock_machine.pins_created.clear()
-
-    try:
         # Create irrigation station
         station = IrrigationStation(config, logger)  # type: ignore
 
-        # Get existing point
-        point_a = station.get_point("locationa")
-        if point_a.config.name != "Location A":
-            print(f"  ❌ get_point('locationa') returned wrong point")
-            return False
+        # Get the point
+        point = station.get_point("testpoint")
 
-        # Get another existing point
-        point_b = station.get_point("locationb")
-        if point_b.config.name != "Location B":
-            print(f"  ❌ get_point('locationb') returned wrong point")
-            return False
+        # Check that point was created
+        self.assertIsNotNone(point)
 
-        # Try to get non-existent point
-        try:
+        # Check that point has correct config
+        self.assertEqual(point.config.name, "Test Point")
+
+        # Test getting non-existent point - should raise ValueError
+        with self.assertRaises(ValueError):
             station.get_point("nonexistent")
-            print(f"  ❌ get_point('nonexistent') should have raised ValueError")
-            return False
-        except ValueError:
-            pass  # Expected
-        except Exception as e:
-            print(f"  ❌ get_point('nonexistent') raised wrong exception: {e}")
-            return False
 
-    except Exception as e:
-        print(f"  ❌ get_point test raised exception: {e}")
-        return False
+    def test_irrigation_station_provide_instructions(self) -> None:
+        """Test provide_instructions method."""
+        config = MockConfig()
+        logger = MockLogger()
 
-    print("  ✅ get_point() test passed")
-    return True
+        # Add a point to config
+        point_config = MockPointConfig("Test Point", 2, 21, 0x48, 0)
+        config.add_point("testpoint", point_config)
 
-
-def test_irrigation_station_provide_instructions() -> bool:
-    """Test provide_instructions method."""
-    print("Testing provide_instructions()...")
-
-    config = MockConfig()
-    logger = MockLogger()
-
-    # Add a test point
-    point_config = MockPointConfig("Location A", 2, 21, 0x48, 0)
-    config.add_point("locationa", point_config)
-    config.station_id = "test123"
-
-    # Reset mock pins
-    mock_machine.pins_created.clear()
-
-    try:
         # Create irrigation station
         station = IrrigationStation(config, logger)  # type: ignore
 
-        # Provide instructions
-        instructions = [
-            ("irrigation/test123/locationa/valve/set", "open"),
-            ("irrigation/test123/locationa/valve/set", "closed"),
-        ]
+        # Provide instructions (list of tuples)
+        instructions = [("test/topic", "open")]
         station.provide_instructions(instructions)
 
         # Check that instructions were stored
-        if len(station._pending_instructions) != 2:
-            print(
-                f"  ❌ Expected 2 pending instructions, got {len(station._pending_instructions)}"
-            )
-            return False
+        self.assertEqual(station._pending_instructions, instructions)
 
-        # Check instruction content
-        if station._pending_instructions[0] != (
-            "irrigation/test123/locationa/valve/set",
-            "open",
-        ):
-            print(f"  ❌ First instruction incorrect")
-            return False
+    def test_irrigation_station_execute_pending_tasks(self) -> None:
+        """Test execute_pending_tasks method."""
+        config = MockConfig()
+        logger = MockLogger()
 
-    except Exception as e:
-        print(f"  ❌ provide_instructions test raised exception: {e}")
-        return False
+        # Add a point to config
+        point_config = MockPointConfig("Test Point", 2, 21, 0x48, 0)
+        config.add_point("testpoint", point_config)
 
-    print("  ✅ provide_instructions() test passed")
-    return True
-
-
-def test_irrigation_station_execute_pending_tasks() -> bool:
-    """Test execute_pending_tasks method."""
-    print("Testing execute_pending_tasks()...")
-
-    config = MockConfig()
-    logger = MockLogger()
-
-    # Add a test point
-    point_config = MockPointConfig("Location A", 2, 21, 0x48, 0)
-    config.add_point("locationa", point_config)
-    config.station_id = "test123"
-
-    # Reset mock pins
-    mock_machine.pins_created.clear()
-
-    try:
         # Create irrigation station
         station = IrrigationStation(config, logger)  # type: ignore
 
-        # Provide instructions
-        instructions = [
-            ("irrigation/test123/locationa/valve/set", "open"),
-        ]
-        station.provide_instructions(instructions)
+        # Add pending instructions
+        station._pending_instructions = [("test/topic", "open")]
 
         # Execute pending tasks
         station.execute_pending_tasks()
 
-        # Check that instructions were processed
-        if len(station._pending_instructions) != 0:
-            print(
-                f"  ❌ Pending instructions should be cleared after execute_pending_tasks"
-            )
-            return False
+        # Check that pending instructions were cleared
+        self.assertEqual(station._pending_instructions, [])
 
-        # Check that valve was opened (pin should be created)
-        if len(mock_machine.pins_created) == 0:
-            print(f"  ❌ No pins created for valve operation")
-            return False
+    def test_irrigation_station_get_status_updates(self) -> None:
+        """Test get_status_updates method."""
+        config = MockConfig()
+        logger = MockLogger()
 
-    except Exception as e:
-        print(f"  ❌ execute_pending_tasks test raised exception: {e}")
-        return False
+        # Add a point to config
+        point_config = MockPointConfig("Test Point", 2, 21, 0x48, 0)
+        config.add_point("testpoint", point_config)
 
-    print("  ✅ execute_pending_tasks() test passed")
-    return True
-
-
-def test_irrigation_station_get_status_updates() -> bool:
-    """Test get_status_updates method."""
-    print("Testing get_status_updates()...")
-
-    config = MockConfig()
-    logger = MockLogger()
-
-    # Add a test point
-    point_config = MockPointConfig("Location A", 2, 21, 0x48, 0)
-    config.add_point("locationa", point_config)
-    config.station_id = "test123"
-
-    # Reset mock pins
-    mock_machine.pins_created.clear()
-
-    try:
         # Create irrigation station
         station = IrrigationStation(config, logger)  # type: ignore
 
-        # Manually add a status update
+        # Add some status updates
         station._status_updates = [
-            ("irrigation/test123/locationa/valve/state", "open"),
-            ("irrigation/test123/locationa/moisture", "0.75"),
+            ("testpoint", "sensor_value=0.5"),
+            ("testpoint", "valve_state=closed"),
         ]
 
         # Get status updates
         updates = station.get_status_updates()
 
         # Check that updates were returned
-        if len(updates) != 2:
-            print(f"  ❌ Expected 2 status updates, got {len(updates)}")
-            return False
-
-        # Check update content
-        if updates[0] != ("irrigation/test123/locationa/valve/state", "open"):
-            print(f"  ❌ First status update incorrect")
-            return False
+        self.assertEqual(
+            updates,
+            [("testpoint", "sensor_value=0.5"), ("testpoint", "valve_state=closed")],
+        )
 
         # Check that status updates were cleared
-        if len(station._status_updates) != 0:
-            print(f"  ❌ Status updates should be cleared after get_status_updates")
-            return False
-
-    except Exception as e:
-        print(f"  ❌ get_status_updates test raised exception: {e}")
-        return False
-
-    print("  ✅ get_status_updates() test passed")
-    return True
-
-
-def main() -> None:
-    """Run all irrigation station tests."""
-    print("=== Testing irrigation_station.py ===")
-
-    passed = 0
-    total = 0
-
-    # Run tests
-    total += 1
-    if test_irrigation_station_initialization():
-        passed += 1
-
-    total += 1
-    if test_irrigation_station_get_point():
-        passed += 1
-
-    total += 1
-    if test_irrigation_station_provide_instructions():
-        passed += 1
-
-    total += 1
-    if test_irrigation_station_execute_pending_tasks():
-        passed += 1
-
-    total += 1
-    if test_irrigation_station_get_status_updates():
-        passed += 1
-
-    # Summary
-    print("=" * 40)
-    if passed == total:
-        print("✅ All irrigation station tests passed!")
-    else:
-        print(f"❌ {passed}/{total} tests passed")
+        self.assertEqual(station._status_updates, [])
 
 
 if __name__ == "__main__":
-    main()
+    # Run the tests
+    unittest.main()

@@ -1,4 +1,4 @@
-"""Test valve.py using simple mocks."""
+"""Test valve.py using unittest framework."""
 
 import sys
 
@@ -36,6 +36,8 @@ sys.modules["time"] = mock_time
 # Now import the modules to test
 from valve import Valve  # type: ignore
 
+import unittest
+
 
 class MockConfig:
     """Mock IrrigationPointConfig."""
@@ -55,151 +57,92 @@ class MockLogger:
         self.messages.append(msg)
 
 
-def test_valve_initialization() -> bool:
-    """Test valve initialization."""
-    print("Testing valve initialization...")
+class TestValve(unittest.TestCase):
+    """Test valve.py using unittest framework."""
 
-    config = MockConfig("Test Valve", 2)
-    logger = MockLogger()
+    def setUp(self) -> None:
+        """Reset mock state before each test."""
+        mock_machine.pins_created.clear()
 
-    # Create valve
-    valve = Valve(config, logger)  # type: ignore
+    def test_valve_initialization(self) -> None:
+        """Test valve initialization."""
+        config = MockConfig("Test Valve", 2)
+        logger = MockLogger()
 
-    # Check initial state
-    if valve.get_state() != "closed":
-        print(f"  ❌ Initial state should be 'closed', got {valve.get_state()}")
-        return False
+        # Create valve
+        valve = Valve(config, logger)  # type: ignore
 
-    # Check that pin was created and turned off
-    if len(mock_machine.pins_created) != 1:
-        print(f"  ❌ Expected 1 pin created, got {len(mock_machine.pins_created)}")
-        return False
+        # Check initial state
+        self.assertEqual(valve.get_state(), "closed")
 
-    pin = mock_machine.pins_created[0]
-    if pin._value != 0:
-        print(f"  ❌ Pin should be off (0), got {pin._value}")
-        return False
+        # Check that pin was created and turned off
+        self.assertEqual(len(mock_machine.pins_created), 1)
 
-    print("  ✅ Valve initialization test passed")
-    return True
+        pin = mock_machine.pins_created[0]
+        self.assertEqual(pin._value, 0)
 
+    def test_valve_open_close(self) -> None:
+        """Test valve open and close operations."""
+        config = MockConfig("Test Valve", 2)
+        logger = MockLogger()
 
-def test_valve_open_close() -> bool:
-    """Test valve open and close operations."""
-    print("Testing valve open/close...")
+        # Reset mock
+        mock_machine.pins_created.clear()
 
-    config = MockConfig("Test Valve", 2)
-    logger = MockLogger()
+        # Create valve
+        valve = Valve(config, logger)  # type: ignore
 
-    # Reset mock
-    mock_machine.pins_created.clear()
+        # Open valve
+        valve.open()
 
-    # Create valve
-    valve = Valve(config, logger)  # type: ignore
+        # Check state
+        self.assertEqual(valve.get_state(), "open")
 
-    # Open valve
-    valve.open()
+        # Check pin
+        pin = mock_machine.pins_created[0]
+        self.assertEqual(pin._value, 1)
 
-    # Check state
-    if valve.get_state() != "open":
-        print(f"  ❌ State should be 'open' after open(), got {valve.get_state()}")
-        return False
+        # Close valve
+        valve.close()
 
-    # Check pin
-    pin = mock_machine.pins_created[0]
-    if pin._value != 1:
-        print(f"  ❌ Pin should be on (1) after open(), got {pin._value}")
-        return False
+        # Check state
+        self.assertEqual(valve.get_state(), "closed")
 
-    # Close valve
-    valve.close()
+        # Check pin
+        self.assertEqual(pin._value, 0)
 
-    # Check state
-    if valve.get_state() != "closed":
-        print(f"  ❌ State should be 'closed' after close(), got {valve.get_state()}")
-        return False
+    def test_valve_logging(self) -> None:
+        """Test valve logging."""
+        config = MockConfig("Test Valve", 2)
+        logger = MockLogger()
 
-    # Check pin
-    if pin._value != 0:
-        print(f"  ❌ Pin should be off (0) after close(), got {pin._value}")
-        return False
+        # Reset mock
+        mock_machine.pins_created.clear()
 
-    print("  ✅ Valve open/close test passed")
-    return True
+        # Create valve
+        valve = Valve(config, logger)  # type: ignore
 
+        # Open and close
+        valve.open()
+        valve.close()
+        valve.get_state()
 
-def test_valve_logging() -> bool:
-    """Test valve logging."""
-    print("Testing valve logging...")
+        # Check logs (no log for initial off, just open, close, get_state)
+        expected_logs = 3
+        self.assertEqual(len(logger.messages), expected_logs)
 
-    config = MockConfig("Test Valve", 2)
-    logger = MockLogger()
+        # Check log content
+        has_open = any(
+            "[Valve] Test Valve: Valve opened" in msg for msg in logger.messages
+        )
+        has_close = any(
+            "[Valve] Test Valve: Valve closed" in msg for msg in logger.messages
+        )
 
-    # Reset mock
-    mock_machine.pins_created.clear()
-
-    # Create valve
-    valve = Valve(config, logger)  # type: ignore
-
-    # Open and close
-    valve.open()
-    valve.close()
-    valve.get_state()
-
-    # Check logs (no log for initial off, just open, close, get_state)
-    expected_logs = 3
-    if len(logger.messages) != expected_logs:
-        print(f"  ❌ Expected {expected_logs} log messages, got {len(logger.messages)}")
-        for msg in logger.messages:
-            print(f"    - {msg}")
-        return False
-
-    # Check log content
-    print(f"  Log messages: {logger.messages}")
-    has_open = any("[Valve] Test Valve: Valve opened" in msg for msg in logger.messages)
-    has_close = any(
-        "[Valve] Test Valve: Valve closed" in msg for msg in logger.messages
-    )
-
-    if not has_open:
-        print(f"  ❌ Missing open log")
-        return False
-
-    if not has_close:
-        print(f"  ❌ Missing close log")
-        return False
-
-    print("  ✅ Valve logging test passed")
-    return True
-
-
-def main() -> None:
-    """Run all valve tests."""
-    print("=== Testing valve.py ===")
-
-    passed = 0
-    total = 0
-
-    # Run tests
-    total += 1
-    if test_valve_initialization():
-        passed += 1
-
-    total += 1
-    if test_valve_open_close():
-        passed += 1
-
-    total += 1
-    if test_valve_logging():
-        passed += 1
-
-    # Summary
-    print("=" * 40)
-    if passed == total:
-        print("✅ All valve tests passed!")
-    else:
-        print(f"❌ {passed}/{total} tests passed")
+        self.assertTrue(has_open)
+        self.assertTrue(has_close)
 
 
 if __name__ == "__main__":
-    main()
+    # Run the tests
+    unittest.main()

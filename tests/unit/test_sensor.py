@@ -1,4 +1,4 @@
-"""Test sensor.py using simple mocks."""
+"""Test sensor.py using unittest framework."""
 
 import sys
 
@@ -60,6 +60,8 @@ sys.modules["ads1x15"] = ADS1115Module()
 # Now import the modules to test
 from sensor import Sensor  # type: ignore
 
+import unittest
+
 
 class MockConfig:
     """Mock IrrigationPointConfig."""
@@ -82,205 +84,118 @@ class MockLogger:
         self.messages.append(msg)
 
 
-def test_sensor_initialization() -> bool:
-    """Test sensor initialization."""
-    print("Testing sensor initialization...")
+class TestSensor(unittest.TestCase):
+    """Test sensor.py using unittest framework."""
 
-    config = MockConfig("Test Sensor", 21, 0)
-    ads = ADS1115Module.ADS1115()
-    logger = MockLogger()
+    def setUp(self) -> None:
+        """Reset mock state before each test."""
+        mock_machine.pins_created.clear()
 
-    # Reset mock pins
-    mock_machine.pins_created.clear()
+    def test_sensor_initialization(self) -> None:
+        """Test sensor initialization."""
+        config = MockConfig("Test Sensor", 21, 0)
+        ads = ADS1115Module.ADS1115()
+        logger = MockLogger()
 
-    # Create sensor
-    sensor = Sensor(config, ads, logger)  # type: ignore
+        # Create sensor
+        sensor = Sensor(config, ads, logger)  # type: ignore
 
-    # Check that MOSFET pin was created
-    if len(mock_machine.pins_created) != 1:
-        print(
-            f"  ❌ Expected 1 pin created for MOSFET, got {len(mock_machine.pins_created)}"
-        )
-        return False
+        # Check that MOSFET pin was created
+        self.assertEqual(len(mock_machine.pins_created), 1)
 
-    # Check that MOSFET is initially off
-    mosfet_pin = mock_machine.pins_created[0]
-    if mosfet_pin._value != 0:
-        print(f"  ❌ MOSFET should be off (0) initially, got {mosfet_pin._value}")
-        return False
+        # Check that MOSFET is initially off
+        mosfet_pin = mock_machine.pins_created[0]
+        self.assertEqual(mosfet_pin._value, 0)
 
-    # Check initial sensor value
-    if sensor._value != 0.5:
-        print(f"  ❌ Initial sensor value should be 0.5, got {sensor._value}")
-        return False
+        # Check initial sensor value
+        self.assertEqual(sensor._value, 0.5)
 
-    print("  ✅ Sensor initialization test passed")
-    return True
+    def test_sensor_measure_normal(self) -> None:
+        """Test sensor measurement with normal reading."""
+        config = MockConfig("Test Sensor", 21, 0)
+        ads = ADS1115Module.ADS1115()
+        logger = MockLogger()
 
+        # Reset mock pins
+        mock_machine.pins_created.clear()
 
-def test_sensor_measure_normal() -> bool:
-    """Test sensor measurement with normal reading."""
-    print("Testing sensor measurement (normal)...")
+        # Create sensor
+        sensor = Sensor(config, ads, logger)  # type: ignore
 
-    config = MockConfig("Test Sensor", 21, 0)
-    ads = ADS1115Module.ADS1115()
-    logger = MockLogger()
+        # Mock ADS1115 to return a normal voltage (2.5V -> 0.5 normalized)
+        ads.voltage_return_value = 2.5  # 2.5V / 5V = 0.5
 
-    # Reset mock pins
-    mock_machine.pins_created.clear()
-
-    # Create sensor
-    sensor = Sensor(config, ads, logger)  # type: ignore
-
-    # Mock ADS1115 to return a normal voltage (2.5V -> 0.5 normalized)
-    ads.voltage_return_value = 2.5  # 2.5V / 5V = 0.5
-
-    # Measure sensor
-    sensor.measure()
-
-    # Check that MOSFET was turned on and off
-    mosfet_pin = mock_machine.pins_created[0]
-    if "on" not in [call[0] for call in mosfet_pin.calls]:
-        print(f"  ❌ MOSFET should have been turned on")
-        return False
-
-    if "off" not in [call[0] for call in mosfet_pin.calls]:
-        print(f"  ❌ MOSFET should have been turned off")
-        return False
-
-    # Check that ADS1115 was called correctly
-    if len(ads.read_calls) == 0:
-        print(f"  ❌ ADS1115.read() should have been called")
-        return False
-
-    # Check channel
-    rate, channel = ads.read_calls[0]
-    if channel != config.ads_channel:
-        print(
-            f"  ❌ ADS1115.read() called with wrong channel: {channel}, expected {config.ads_channel}"
-        )
-        return False
-
-    # Check that raw_to_v was called
-    if len(ads.raw_to_v_calls) == 0:
-        print(f"  ❌ ADS1115.raw_to_v() should have been called")
-        return False
-
-    # Check sensor value (should be around 0.5 with 2.5V reading)
-    value = sensor.get_value()
-    expected = 0.5  # 2.5V / 5V = 0.5
-    if abs(value - expected) > 0.01:
-        print(f"  ❌ Sensor value should be ~{expected}, got {value}")
-        return False
-
-    print("  ✅ Sensor measurement (normal) test passed")
-    return True
-
-
-def test_sensor_measure_out_of_range() -> bool:
-    """Test sensor measurement with out-of-range reading."""
-    print("Testing sensor measurement (out of range)...")
-
-    config = MockConfig("Test Sensor", 21, 0)
-    ads = ADS1115Module.ADS1115()
-    logger = MockLogger()
-
-    # Reset mock pins
-    mock_machine.pins_created.clear()
-
-    # Create sensor
-    sensor = Sensor(config, ads, logger)  # type: ignore
-
-    # Mock ADS1115 to return an out-of-range voltage (6V -> 1.2 normalized, should trigger error)
-    ads.voltage_return_value = 6.0
-
-    # Store initial value
-    initial_value = sensor.get_value()
-
-    # Measure sensor - should log error but not crash
-    try:
+        # Measure sensor
         sensor.measure()
-    except Exception as e:
-        print(f"  ❌ Sensor.measure() should not crash on out-of-range reading: {e}")
-        return False
 
-    # Check that error was logged
-    error_logged = any("Error reading sensor" in msg for msg in logger.messages)
-    if not error_logged:
-        print(f"  ❌ Should have logged error for out-of-range reading")
-        return False
+        # Check that MOSFET was turned on and off
+        mosfet_pin = mock_machine.pins_created[0]
+        self.assertIn("on", [call[0] for call in mosfet_pin.calls])
+        self.assertIn("off", [call[0] for call in mosfet_pin.calls])
 
-    # Check that sensor value remains at initial value (last known good value)
-    final_value = sensor.get_value()
-    if final_value != initial_value:
-        print(
-            f"  ❌ Sensor value should remain at last known value {initial_value} on error, got {final_value}"
-        )
-        return False
+        # Check that ADS1115 was called correctly
+        self.assertTrue(len(ads.read_calls) > 0)
 
-    print("  ✅ Sensor measurement (out of range) test passed")
-    return True
+        # Check channel
+        rate, channel = ads.read_calls[0]
+        self.assertEqual(channel, config.ads_channel)
 
+        # Check that raw_to_v was called
+        self.assertTrue(len(ads.raw_to_v_calls) > 0)
 
-def test_sensor_get_value() -> bool:
-    """Test sensor get_value method."""
-    print("Testing sensor get_value()...")
+        # Check sensor value (should be around 0.5 with 2.5V reading)
+        value = sensor.get_value()
+        expected = 0.5  # 2.5V / 5V = 0.5
+        self.assertAlmostEqual(value, expected, places=2)
 
-    config = MockConfig("Test Sensor", 21, 0)
-    ads = ADS1115Module.ADS1115()
-    logger = MockLogger()
+    def test_sensor_measure_out_of_range(self) -> None:
+        """Test sensor measurement with out-of-range reading."""
+        config = MockConfig("Test Sensor", 21, 0)
+        ads = ADS1115Module.ADS1115()
+        logger = MockLogger()
 
-    # Create sensor
-    sensor = Sensor(config, ads, logger)  # type: ignore
+        # Reset mock pins
+        mock_machine.pins_created.clear()
 
-    # Initial value should be 0.5
-    value = sensor.get_value()
-    if value != 0.5:
-        print(f"  ❌ Initial get_value() should return 0.5, got {value}")
-        return False
+        # Create sensor
+        sensor = Sensor(config, ads, logger)  # type: ignore
 
-    # Change internal value and check get_value returns it
-    sensor._value = 0.75
-    value = sensor.get_value()
-    if value != 0.75:
-        print(f"  ❌ get_value() should return current value 0.75, got {value}")
-        return False
+        # Mock ADS1115 to return an out-of-range voltage (6V -> 1.2 normalized, should trigger error)
+        ads.voltage_return_value = 6.0
 
-    print("  ✅ Sensor get_value() test passed")
-    return True
+        # Store initial value
+        initial_value = sensor.get_value()
 
+        # Measure sensor - should log error but not crash
+        sensor.measure()
 
-def main() -> None:
-    """Run all sensor tests."""
-    print("=== Testing sensor.py ===")
+        # Check that error was logged
+        error_logged = any("Error reading sensor" in msg for msg in logger.messages)
+        self.assertTrue(error_logged)
 
-    passed = 0
-    total = 0
+        # Check that sensor value remains at initial value (last known good value)
+        final_value = sensor.get_value()
+        self.assertEqual(final_value, initial_value)
 
-    # Run tests
-    total += 1
-    if test_sensor_initialization():
-        passed += 1
+    def test_sensor_get_value(self) -> None:
+        """Test sensor get_value method."""
+        config = MockConfig("Test Sensor", 21, 0)
+        ads = ADS1115Module.ADS1115()
+        logger = MockLogger()
 
-    total += 1
-    if test_sensor_measure_normal():
-        passed += 1
+        # Create sensor
+        sensor = Sensor(config, ads, logger)  # type: ignore
 
-    total += 1
-    if test_sensor_measure_out_of_range():
-        passed += 1
+        # Initial value should be 0.5
+        value = sensor.get_value()
+        self.assertEqual(value, 0.5)
 
-    total += 1
-    if test_sensor_get_value():
-        passed += 1
-
-    # Summary
-    print("=" * 40)
-    if passed == total:
-        print("✅ All sensor tests passed!")
-    else:
-        print(f"❌ {passed}/{total} tests passed")
+        # Change internal value and check get_value returns it
+        sensor._value = 0.75
+        value = sensor.get_value()
+        self.assertEqual(value, 0.75)
 
 
 if __name__ == "__main__":
-    main()
+    # Run the tests
+    unittest.main()

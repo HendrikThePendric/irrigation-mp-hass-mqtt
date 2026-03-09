@@ -1,4 +1,4 @@
-"""Test config.py using simple mocks."""
+"""Test config.py using unittest framework."""
 
 import sys
 import json
@@ -37,402 +37,171 @@ sys.modules["time"] = mock_time
 # Now import the modules to test
 from config import Config, IrrigationPointConfig, NetworkConfig  # type: ignore
 
-
-def test_clean_string() -> bool:
-    """Test _clean_string function."""
-    print("Testing _clean_string()...")
-
-    # Import the function directly
-    from config import _clean_string  # type: ignore
-
-    # Test cases
-    test_cases = [
-        ("Hello World", "helloworld"),
-        ("Test-123_ABC", "test123abc"),
-        ("  Spaces  ", "spaces"),
-        ("Special!@#$%Chars", "specialchars"),
-        ("", ""),
-    ]
-
-    for input_str, expected in test_cases:
-        result = _clean_string(input_str)
-        if result != expected:
-            print(
-                f"  ❌ _clean_string('{input_str}') = '{result}', expected '{expected}'"
-            )
-            return False
-
-    print("  ✅ _clean_string() test passed")
-    return True
+import unittest
 
 
-def test_get_if_valid() -> bool:
-    """Test _get_if_valid function."""
-    print("Testing _get_if_valid()...")
+class TestConfig(unittest.TestCase):
+    """Test config.py using unittest framework."""
 
-    # Import the function directly
-    from config import _get_if_valid  # type: ignore
+    def test_clean_string(self) -> None:
+        """Test _clean_string function."""
+        from config import _clean_string  # type: ignore
 
-    # Test valid case
-    conf = {"name": "Test", "count": 42, "enabled": True}
+        # Test cases
+        test_cases = [
+            ("Hello World", "helloworld"),
+            ("Test-123_ABC", "test123abc"),
+            ("  Spaces  ", "spaces"),
+            ("Special!@#$%Chars", "specialchars"),
+            ("", ""),
+        ]
 
-    # Valid string
-    try:
+        for input_str, expected in test_cases:
+            result = _clean_string(input_str)
+            self.assertEqual(result, expected, f"_clean_string('{input_str}')")
+
+    def test_get_if_valid(self) -> None:
+        """Test _get_if_valid function."""
+        from config import _get_if_valid  # type: ignore
+
+        # Test valid case
+        conf = {"name": "Test", "count": 42, "enabled": True}
+
+        # Valid string
         result = _get_if_valid("name", conf, str)
-        if result != "Test":
-            print(f"  ❌ _get_if_valid('name') = '{result}', expected 'Test'")
-            return False
-    except Exception as e:
-        print(f"  ❌ _get_if_valid('name') raised exception: {e}")
-        return False
+        self.assertEqual(result, "Test")
 
-    # Valid int
-    try:
+        # Valid int
         result = _get_if_valid("count", conf, int)
-        if result != 42:
-            print(f"  ❌ _get_if_valid('count') = {result}, expected 42")
-            return False
-    except Exception as e:
-        print(f"  ❌ _get_if_valid('count') raised exception: {e}")
-        return False
+        self.assertEqual(result, 42)
 
-    # Valid bool
-    try:
+        # Valid bool
         result = _get_if_valid("enabled", conf, bool)
-        if result != True:
-            print(f"  ❌ _get_if_valid('enabled') = {result}, expected True")
-            return False
-    except Exception as e:
-        print(f"  ❌ _get_if_valid('enabled') raised exception: {e}")
-        return False
+        self.assertTrue(result)
 
-    # Test missing key
-    try:
-        _get_if_valid("missing", conf, str)
-        print(f"  ❌ _get_if_valid('missing') should have raised KeyError")
-        return False
-    except KeyError:
-        pass  # Expected
-    except Exception as e:
-        print(f"  ❌ _get_if_valid('missing') raised wrong exception: {e}")
-        return False
+        # Test missing key
+        with self.assertRaises(KeyError):
+            _get_if_valid("missing", conf, str)
 
-    # Test wrong type
-    try:
-        _get_if_valid("name", conf, int)
-        print(f"  ❌ _get_if_valid('name', type=int) should have raised TypeError")
-        return False
-    except TypeError:
-        pass  # Expected
-    except Exception as e:
-        print(f"  ❌ _get_if_valid('name', type=int) raised wrong exception: {e}")
-        return False
+        # Test wrong type
+        with self.assertRaises(TypeError):
+            _get_if_valid("name", conf, int)
 
-    # Test empty string
-    try:
-        _get_if_valid("empty", {"empty": ""}, str)
-        print(
-            f"  ❌ _get_if_valid('empty') with empty string should have raised ValueError"
-        )
-        return False
-    except ValueError:
-        pass  # Expected
-    except Exception as e:
-        print(
-            f"  ❌ _get_if_valid('empty') with empty string raised wrong exception: {e}"
-        )
-        return False
+        # Test empty string
+        with self.assertRaises(ValueError):
+            _get_if_valid("empty", {"empty": ""}, str)
 
-    print("  ✅ _get_if_valid() test passed")
-    return True
+    def test_network_config(self) -> None:
+        """Test NetworkConfig class."""
+        # Valid config
+        conf = {
+            "wifi_ssid": "MyNetwork",
+            "wifi_password": "secret123",
+            "mqtt_broker_ip": "192.168.1.100",
+        }
 
-
-def test_network_config() -> bool:
-    """Test NetworkConfig class."""
-    print("Testing NetworkConfig...")
-
-    # Valid config
-    conf = {
-        "wifi_ssid": "MyNetwork",
-        "wifi_password": "secret123",
-        "mqtt_broker_ip": "192.168.1.100",
-    }
-
-    try:
         network = NetworkConfig(conf)
 
-        if network.wifi_ssid != "MyNetwork":
-            print(f"  ❌ wifi_ssid = '{network.wifi_ssid}', expected 'MyNetwork'")
-            return False
+        self.assertEqual(network.wifi_ssid, "MyNetwork")
+        self.assertEqual(network.wifi_password, "secret123")
+        self.assertEqual(network.mqtt_broker_ip, "192.168.1.100")
 
-        if network.wifi_password != "secret123":
-            print(
-                f"  ❌ wifi_password = '{network.wifi_password}', expected 'secret123'"
-            )
-            return False
+        # Test missing field
+        with self.assertRaises(KeyError):
+            NetworkConfig({"wifi_ssid": "Test", "wifi_password": "secret"})
 
-        if network.mqtt_broker_ip != "192.168.1.100":
-            print(
-                f"  ❌ mqtt_broker_ip = '{network.mqtt_broker_ip}', expected '192.168.1.100'"
-            )
-            return False
+    def test_irrigation_point_config(self) -> None:
+        """Test IrrigationPointConfig class."""
+        # Valid config
+        conf = {
+            "name": "Location A",
+            "valve_pin": 2,
+            "mosfet_pin": 21,
+            "ads_address": "0x48",
+            "ads_channel": 0,
+        }
 
-    except Exception as e:
-        print(f"  ❌ NetworkConfig raised exception: {e}")
-        return False
-
-    # Test missing field
-    try:
-        NetworkConfig({"wifi_ssid": "Test", "wifi_password": "secret"})
-        print(
-            f"  ❌ NetworkConfig with missing mqtt_broker_ip should have raised KeyError"
-        )
-        return False
-    except KeyError:
-        pass  # Expected
-    except Exception as e:
-        print(f"  ❌ NetworkConfig with missing field raised wrong exception: {e}")
-        return False
-
-    print("  ✅ NetworkConfig test passed")
-    return True
-
-
-def test_irrigation_point_config() -> bool:
-    """Test IrrigationPointConfig class."""
-    print("Testing IrrigationPointConfig...")
-
-    # Valid config
-    conf = {
-        "name": "Location A",
-        "valve_pin": 2,
-        "mosfet_pin": 21,
-        "ads_address": "0x48",
-        "ads_channel": 0,
-    }
-
-    try:
         point = IrrigationPointConfig(conf)
 
-        if point.name != "Location A":
-            print(f"  ❌ name = '{point.name}', expected 'Location A'")
-            return False
-
-        if point.valve_pin != 2:
-            print(f"  ❌ valve_pin = {point.valve_pin}, expected 2")
-            return False
-
-        if point.mosfet_pin != 21:
-            print(f"  ❌ mosfet_pin = {point.mosfet_pin}, expected 21")
-            return False
-
-        if point.ads_address != 0x48:
-            print(f"  ❌ ads_address = {hex(point.ads_address)}, expected 0x48")
-            return False
-
-        if point.ads_channel != 0:
-            print(f"  ❌ ads_channel = {point.ads_channel}, expected 0")
-            return False
-
-        if point.id != "locationa":
-            print(f"  ❌ id = '{point.id}', expected 'locationa'")
-            return False
+        self.assertEqual(point.name, "Location A")
+        self.assertEqual(point.valve_pin, 2)
+        self.assertEqual(point.mosfet_pin, 21)
+        self.assertEqual(point.ads_address, 0x48)
+        self.assertEqual(point.ads_channel, 0)
+        self.assertEqual(point.id, "locationa")
 
         # Check default values
-        if point.rolling_window != 5:
-            print(f"  ❌ rolling_window = {point.rolling_window}, expected 5")
-            return False
+        self.assertEqual(point.rolling_window, 5)
+        self.assertAlmostEqual(point.ema_alpha, 0.2)
 
-        if point.ema_alpha != 0.2:
-            print(f"  ❌ ema_alpha = {point.ema_alpha}, expected 0.2")
-            return False
+        # Test invalid ADS address
+        with self.assertRaises(ValueError):
+            IrrigationPointConfig(
+                {
+                    "name": "Test",
+                    "valve_pin": 2,
+                    "mosfet_pin": 21,
+                    "ads_address": "0x99",  # Invalid address
+                    "ads_channel": 0,
+                }
+            )
 
-    except Exception as e:
-        print(f"  ❌ IrrigationPointConfig raised exception: {e}")
-        return False
+        # Test invalid ADS channel
+        with self.assertRaises(ValueError):
+            IrrigationPointConfig(
+                {
+                    "name": "Test",
+                    "valve_pin": 2,
+                    "mosfet_pin": 21,
+                    "ads_address": "0x48",
+                    "ads_channel": 5,  # Invalid channel
+                }
+            )
 
-    # Test invalid ADS address
-    try:
-        IrrigationPointConfig(
-            {
-                "name": "Test",
-                "valve_pin": 2,
-                "mosfet_pin": 21,
-                "ads_address": "0x99",  # Invalid address
-                "ads_channel": 0,
-            }
-        )
-        print(
-            f"  ❌ IrrigationPointConfig with invalid ads_address should have raised ValueError"
-        )
-        return False
-    except ValueError:
-        pass  # Expected
-    except Exception as e:
-        print(
-            f"  ❌ IrrigationPointConfig with invalid ads_address raised wrong exception: {e}"
-        )
-        return False
+    def test_config_class(self) -> None:
+        """Test Config class."""
+        # Use fixture file
+        test_file = "tests/fixtures/test_config.json"
 
-    # Test invalid ADS channel
-    try:
-        IrrigationPointConfig(
-            {
-                "name": "Test",
-                "valve_pin": 2,
-                "mosfet_pin": 21,
-                "ads_address": "0x48",
-                "ads_channel": 5,  # Invalid channel
-            }
-        )
-        print(
-            f"  ❌ IrrigationPointConfig with invalid ads_channel should have raised ValueError"
-        )
-        return False
-    except ValueError:
-        pass  # Expected
-    except Exception as e:
-        print(
-            f"  ❌ IrrigationPointConfig with invalid ads_channel raised wrong exception: {e}"
-        )
-        return False
-
-    print("  ✅ IrrigationPointConfig test passed")
-    return True
-
-
-def test_config_class() -> bool:
-    """Test Config class."""
-    print("Testing Config class...")
-
-    # Use fixture file
-    test_file = "tests/fixtures/test_config.json"
-
-    try:
         # Create config from fixture file
         config = Config(test_file)
 
         # Check station info
-        if config.station_name != "Backyard irrigation station":
-            print(
-                f"  ❌ station_name = '{config.station_name}', expected 'Backyard irrigation station'"
-            )
-            return False
+        self.assertEqual(config.station_name, "Backyard irrigation station")
 
         # Check device ID (based on mock unique_id)
         expected_id = "".join(f"{b:02x}" for b in mock_machine.unique_id())[-8:]
-        if config.station_id != expected_id:
-            print(f"  ❌ station_id = '{config.station_id}', expected '{expected_id}'")
-            return False
+        self.assertEqual(config.station_id, expected_id)
 
         # Check MQTT ID
         expected_mqtt_id = f"backyardirrigationstation-{expected_id}"
-        if config.station_mqtt_id != expected_mqtt_id:
-            print(
-                f"  ❌ station_mqtt_id = '{config.station_mqtt_id}', expected '{expected_mqtt_id}'"
-            )
-            return False
+        self.assertEqual(config.station_mqtt_id, expected_mqtt_id)
 
         # Check network config
-        if config.network.wifi_ssid != "MyNetwork":
-            print(
-                f"  ❌ network.wifi_ssid = '{config.network.wifi_ssid}', expected 'MyNetwork'"
-            )
-            return False
+        self.assertEqual(config.network.wifi_ssid, "MyNetwork")
 
         # Check global parameters
-        if config.rolling_window != 3:
-            print(f"  ❌ rolling_window = {config.rolling_window}, expected 3")
-            return False
-
-        if config.ema_alpha != 0.2:
-            print(f"  ❌ ema_alpha = {config.ema_alpha}, expected 0.2")
-            return False
-
-        if config.publish_interval_ms != 5 * 60 * 1000:  # 5 minutes in ms
-            print(
-                f"  ❌ publish_interval_ms = {config.publish_interval_ms}, expected {5 * 60 * 1000}"
-            )
-            return False
+        self.assertEqual(config.rolling_window, 3)
+        self.assertAlmostEqual(config.ema_alpha, 0.2)
+        self.assertEqual(config.publish_interval_ms, 5 * 60 * 1000)  # 5 minutes in ms
 
         # Check irrigation points
-        if len(config.irrigation_points) != 2:
-            print(
-                f"  ❌ Expected 2 irrigation points, got {len(config.irrigation_points)}"
-            )
-            return False
+        self.assertEqual(len(config.irrigation_points), 2)
 
         # Check first point
         point_a = config.irrigation_points.get("locationa")
-        if not point_a:
-            print(f"  ❌ Point 'locationa' not found")
-            return False
-
-        if point_a.name != "Location A":
-            print(f"  ❌ point_a.name = '{point_a.name}', expected 'Location A'")
-            return False
-
-        # Check that global parameters were copied to points
-        if point_a.rolling_window != 3:
-            print(f"  ❌ point_a.rolling_window = {point_a.rolling_window}, expected 3")
-            return False
-
-        if point_a.ema_alpha != 0.2:
-            print(f"  ❌ point_a.ema_alpha = {point_a.ema_alpha}, expected 0.2")
-            return False
+        self.assertIsNotNone(point_a)
+        if point_a:
+            self.assertEqual(point_a.name, "Location A")
+            # Check that global parameters were copied to points
+            self.assertEqual(point_a.rolling_window, 3)
+            self.assertAlmostEqual(point_a.ema_alpha, 0.2)
 
         # Check __str__ method
         str_repr = str(config)
-        if not str_repr.startswith("Irrigation station config:"):
-            print(f"  ❌ str(config) doesn't start with expected prefix")
-            return False
-
-    except Exception as e:
-        print(f"  ❌ Config raised exception: {e}")
-        import traceback
-
-        traceback.print_exc()
-        return False
-
-    print("  ✅ Config class test passed")
-    return True
-
-
-def main() -> None:
-    """Run all config tests."""
-    print("=== Testing config.py ===")
-
-    passed = 0
-    total = 0
-
-    # Run tests
-    total += 1
-    if test_clean_string():
-        passed += 1
-
-    total += 1
-    if test_get_if_valid():
-        passed += 1
-
-    total += 1
-    if test_network_config():
-        passed += 1
-
-    total += 1
-    if test_irrigation_point_config():
-        passed += 1
-
-    total += 1
-    if test_config_class():
-        passed += 1
-
-    # Summary
-    print("=" * 40)
-    if passed == total:
-        print("✅ All config tests passed!")
-    else:
-        print(f"❌ {passed}/{total} tests passed")
+        self.assertTrue(str_repr.startswith("Irrigation station config:"))
 
 
 if __name__ == "__main__":
-    main()
+    # Run the tests
+    unittest.main()
