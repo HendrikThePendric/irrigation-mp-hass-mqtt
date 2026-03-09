@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
-"""Simple test runner for MicroPython irrigation system.
+"""Enhanced test runner for MicroPython irrigation system.
 
 This runs tests in actual MicroPython interpreter.
-Tests are simple scripts that print results.
+Supports both simple test scripts and unittest framework tests.
 """
 
 import subprocess
@@ -10,15 +10,65 @@ import sys
 import os.path
 
 
-def run_micropython_test(test_file: str) -> bool:
-    """Run a test file in MicroPython and check output."""
-    print(f"Running: {test_file}")
+def is_unittest_test(test_file: str) -> bool:
+    """Check if a test file uses unittest framework."""
+    try:
+        with open(test_file, "r") as f:
+            content = f.read()
+            # Check for unittest imports or usage
+            return "import unittest" in content or "unittest.TestCase" in content
+    except:
+        return False
+
+
+def run_unittest_test(test_file: str) -> bool:
+    """Run a unittest test file in MicroPython."""
+    print(f"Running unittest test: {test_file}")
 
     # Get the MicroPython binary path
     micropython_bin = "./micropython-local"
     if not os.path.exists(micropython_bin):
         print(f"❌ MicroPython binary not found at {micropython_bin}")
-        print("Run: ./scripts/setup_micropython.sh")
+        print("Run: ./scripts/setup_micropython_test_env.sh")
+        return False
+
+    try:
+        # Run unittest test in MicroPython
+        result = subprocess.run(
+            [micropython_bin, test_file], capture_output=True, text=True, timeout=10
+        )
+
+        # Print output
+        if result.stdout:
+            print(result.stdout)
+        if result.stderr:
+            print(f"Stderr: {result.stderr}")
+
+        # Check for unittest success indicator
+        if "OK" in result.stdout and "FAILED" not in result.stdout:
+            print(f"✅ {test_file} passed (unittest)")
+            return True
+        else:
+            print(f"❌ {test_file} failed (unittest)")
+            return False
+
+    except subprocess.TimeoutExpired:
+        print(f"❌ {test_file} timed out")
+        return False
+    except Exception as e:
+        print(f"❌ {test_file} error: {e}")
+        return False
+
+
+def run_simple_test(test_file: str) -> bool:
+    """Run a simple test file in MicroPython (legacy format)."""
+    print(f"Running simple test: {test_file}")
+
+    # Get the MicroPython binary path
+    micropython_bin = "./micropython-local"
+    if not os.path.exists(micropython_bin):
+        print(f"❌ MicroPython binary not found at {micropython_bin}")
+        print("Run: ./scripts/setup_micropython_test_env.sh")
         return False
 
     try:
@@ -49,6 +99,14 @@ def run_micropython_test(test_file: str) -> bool:
         return False
 
 
+def run_micropython_test(test_file: str) -> bool:
+    """Run a test file in MicroPython, detecting test type automatically."""
+    if is_unittest_test(test_file):
+        return run_unittest_test(test_file)
+    else:
+        return run_simple_test(test_file)
+
+
 def main() -> None:
     """Run all tests."""
     print("=== MicroPython Test Runner ===")
@@ -58,7 +116,7 @@ def main() -> None:
     if not os.path.exists(micropython_bin):
         print("MicroPython not found. Setting up...")
         setup_result = subprocess.run(
-            ["./scripts/setup_micropython.sh"], capture_output=True, text=True
+            ["./scripts/setup_micropython_test_env.sh"], capture_output=True, text=True
         )
         if setup_result.returncode != 0:
             print("❌ Failed to setup MicroPython")

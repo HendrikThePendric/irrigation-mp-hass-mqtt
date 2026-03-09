@@ -6,7 +6,7 @@ This project includes a simple but effective testing framework that runs tests i
 
 ```bash
 # Setup MicroPython runtime (first time only)
-./scripts/setup_micropython.sh
+./scripts/setup_micropython_test_env.sh
 
 # Run all tests
 python3 tests/run_tests.py

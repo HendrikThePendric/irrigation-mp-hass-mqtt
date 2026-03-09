@@ -146,7 +146,7 @@ This project includes a comprehensive testing framework that allows **Test-Drive
 
 #### Setup MicroPython Runtime (first time)
 ```bash
-./scripts/setup_micropython.sh
+./scripts/setup_micropython_test_env.sh
 ```
 
 #### Run All Tests
@@ -256,6 +256,32 @@ def test_hardware() -> bool:
 - `irrigation_point.py`: Complete irrigation point logic
 - `mqtt_hass_manager.py`: MQTT integration with mocked network
 
+### unittest Framework Support
+
+The project supports **MicroPython's unittest framework**. The `setup.sh` script automatically installs it.
+
+**Example unittest test:**
+```python
+import sys
+sys.path.insert(0, "src")
+import unittest
+
+from rolling_average import RollingAverage
+
+class TestRollingAverage(unittest.TestCase):
+    def test_basic_average(self) -> None:
+        ra = RollingAverage(window_size=3)
+        ra.add_reading(10)
+        ra.add_reading(20)
+        ra.add_reading(30)
+        self.assertAlmostEqual(ra.get_average(), 15.6, places=3)
+
+if __name__ == "__main__":
+    unittest.main()
+```
+
+The test runner (`tests/run_tests.py`) automatically detects and runs both simple tests and unittest tests.
+
 ### Validation Steps (Hardware)
 1. Run hardware tests to verify connections
 2. Deploy config and certificates
@@ -287,7 +313,7 @@ def test_hardware() -> bool:
 source ./scripts/activate_venv.sh
 
 # Setup MicroPython for testing (first time)
-./scripts/setup_micropython.sh
+./scripts/setup_micropython_test_env.sh
 
 # Run tests
 python3 tests/run_tests.py
