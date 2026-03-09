@@ -83,78 +83,6 @@ class MockOS:
         pass
 
 
-# Mock datetime module
-class MockDatetime:
-    """Mock datetime module for MicroPython testing."""
-
-    class datetime:
-        def __init__(
-            self,
-            year: int,
-            month: int = 1,
-            day: int = 1,
-            hour: int = 0,
-            minute: int = 0,
-            second: int = 0,
-        ):
-            self.year = year
-            self.month = month
-            self.day = day
-            self.hour = hour
-            self.minute = minute
-            self.second = second
-
-        def __str__(self) -> str:
-            return f"{self.year}-{self.month:02}-{self.day:02} {self.hour:02}:{self.minute:02}:{self.second:02}"
-
-    class date:
-        def __init__(self, year: int, month: int, day: int):
-            self.year = year
-            self.month = month
-            self.day = day
-
-        def weekday(self) -> int:
-            # Simple mock - always return Monday (0)
-            return 0
-
-        def __sub__(self, other):
-            # Mock subtraction with timedelta
-            if isinstance(other, MockDatetime.timedelta):
-                # Return a new date (simplified)
-                return MockDatetime.date(self.year, self.month, self.day)
-            return self
-
-    class time:
-        def __init__(self, hour: int = 0, minute: int = 0, second: int = 0):
-            self.hour = hour
-            self.minute = minute
-            self.second = second
-
-    class timedelta:
-        def __init__(
-            self,
-            days: int = 0,
-            seconds: int = 0,
-            microseconds: int = 0,
-            milliseconds: int = 0,
-            minutes: int = 0,
-            hours: int = 0,
-            weeks: int = 0,
-        ):
-            self.days = days
-            self.seconds = seconds
-
-        def __add__(self, other):
-            # Simple mock addition
-            return MockDatetime.timedelta(days=self.days, seconds=self.seconds)
-
-    @staticmethod
-    def combine(date, time):
-        return MockDatetime.datetime(
-            date.year, date.month, date.day, time.hour, time.minute, time.second
-        )
-
-
 # Mock ntptime module
 class MockNTPTime:
     """Mock ntptime module."""
@@ -193,6 +121,12 @@ class MockTime:
         """Reset tick counter for tests."""
         MockTime._ticks = 0
 
+    @staticmethod
+    def gmtime(seconds: int | None = None) -> tuple:
+        """Mock gmtime - returns a fixed time tuple."""
+        # Return a fixed time: (2024, 1, 1, 0, 0, 0, 0, 0)
+        return (2024, 1, 1, 0, 0, 0, 0, 0)
+
 
 # Mock ADS1x15 module for ADC
 class MockADS1115:
@@ -216,7 +150,6 @@ class MockADS1115:
 # Global mock instances
 mock_machine = MockMachine()
 mock_os = MockOS()
-mock_datetime = MockDatetime()
 mock_ntptime = MockNTPTime()
 mock_time = MockTime()
 mock_ads1115 = MockADS1115()

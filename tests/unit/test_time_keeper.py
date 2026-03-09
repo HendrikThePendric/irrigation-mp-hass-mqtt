@@ -11,7 +11,6 @@ from simple_mocks import (
     MockPin,
     mock_machine,
     mock_os,
-    mock_datetime,
     mock_ntptime,
     mock_time,
 )
@@ -48,88 +47,11 @@ class MachineModule:
 
 
 # Mock datetime module with more functionality
-class MockDatetimeEnhanced:
-    """Enhanced mock datetime module for time_keeper."""
-
-    class datetime:
-        def __init__(self, year, month=1, day=1, hour=0, minute=0, second=0):
-            self.year = year
-            self.month = month
-            self.day = day
-            self.hour = hour
-            self.minute = minute
-            self.second = second
-
-        def __str__(self):
-            return f"{self.year}-{self.month:02}-{self.day:02} {self.hour:02}:{self.minute:02}:{self.second:02}"
-
-        def __add__(self, other):
-            if isinstance(other, MockDatetimeEnhanced.timedelta):
-                # Simple mock addition
-                return MockDatetimeEnhanced.datetime(
-                    self.year, self.month, self.day, self.hour, self.minute, self.second
-                )
-            return self
-
-        def __lt__(self, other):
-            # Simple comparison for DST logic
-            return True
-
-        def __le__(self, other):
-            return True
-
-        @staticmethod
-        def combine(date, time):
-            return MockDatetimeEnhanced.datetime(
-                date.year, date.month, date.day, time.hour, time.minute, time.second
-            )
-
-    class date:
-        def __init__(self, year, month, day):
-            self.year = year
-            self.month = month
-            self.day = day
-
-        def weekday(self):
-            # Mock weekday - return 0 for Monday
-            return 0
-
-        def __sub__(self, other):
-            # Mock subtraction with timedelta
-            if isinstance(other, MockDatetimeEnhanced.timedelta):
-                # Return a new date (simplified)
-                return MockDatetimeEnhanced.date(self.year, self.month, self.day)
-            return self
-
-    class time:
-        def __init__(self, hour=0, minute=0, second=0):
-            self.hour = hour
-            self.minute = minute
-            self.second = second
-
-    class timedelta:
-        def __init__(
-            self,
-            days=0,
-            seconds=0,
-            microseconds=0,
-            milliseconds=0,
-            minutes=0,
-            hours=0,
-            weeks=0,
-        ):
-            self.days = days
-            self.seconds = seconds
-
-        def __add__(self, other):
-            # Simple mock addition
-            return MockDatetimeEnhanced.timedelta(days=self.days, seconds=self.seconds)
 
 
 # Add all mock modules to sys.modules
 sys.modules["machine"] = MachineModule()
 sys.modules["os"] = mock_os
-sys.modules["datetime"] = MockDatetimeEnhanced()
 sys.modules["ntptime"] = mock_ntptime
 sys.modules["time"] = mock_time
 

@@ -7,14 +7,10 @@ sys.path.insert(0, "src")
 sys.path.insert(0, "tests")
 
 # Import simple mocks
-from simple_mocks import (
-    MockPin,
+from simple_mocks import (MockPin,
     mock_machine,
-    mock_os,
-    mock_datetime,
-    mock_ntptime,
-    mock_time,
-)
+    mock_os, mock_ntptime,
+    mock_time,)
 
 
 # Create mock modules before importing ANY project code
@@ -46,7 +42,6 @@ class MachineModule:
 # Add all mock modules to sys.modules
 sys.modules["machine"] = MachineModule()
 sys.modules["os"] = mock_os
-sys.modules["datetime"] = mock_datetime
 sys.modules["ntptime"] = mock_ntptime
 sys.modules["time"] = mock_time
 
