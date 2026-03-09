@@ -305,45 +305,11 @@ def test_config_class() -> bool:
     """Test Config class."""
     print("Testing Config class...")
 
-    # Create a mock config file
-    config_data = {
-        "station_name": "Backyard irrigation station",
-        "rolling_window": 3,
-        "ema_alpha": 0.2,
-        "publish_interval_minutes": 5,
-        "network": {
-            "wifi_ssid": "MyNetwork",
-            "wifi_password": "secret123",
-            "mqtt_broker_ip": "192.168.1.100",
-        },
-        "irrigation_points": [
-            {
-                "name": "Location A",
-                "valve_pin": 2,
-                "mosfet_pin": 21,
-                "ads_address": "0x48",
-                "ads_channel": 0,
-            },
-            {
-                "name": "Location B",
-                "valve_pin": 3,
-                "mosfet_pin": 22,
-                "ads_address": "0x49",
-                "ads_channel": 1,
-            },
-        ],
-    }
-
-    # Write to a temporary file - MicroPython doesn't have tempfile
-    # Create a simple test file in the current directory
-    test_file = "test_config.json"
+    # Use fixture file
+    test_file = "tests/fixtures/test_config.json"
 
     try:
-        # Write config data
-        with open(test_file, "w") as f:
-            json.dump(config_data, f)
-
-        # Create config
+        # Create config from fixture file
         config = Config(test_file)
 
         # Check station info
@@ -427,10 +393,6 @@ def test_config_class() -> bool:
 
         traceback.print_exc()
         return False
-
-    finally:
-        # Don't try to clean up in test - file will remain but that's OK for testing
-        pass
 
     print("  ✅ Config class test passed")
     return True
