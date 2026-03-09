@@ -194,9 +194,29 @@ class MockTime:
         MockTime._ticks = 0
 
 
+# Mock ADS1x15 module for ADC
+class MockADS1115:
+    """Mock ADS1115 ADC class."""
+
+    def __init__(self, i2c_bus=None, address=None, gain=None):
+        self.read_calls = []
+        self.raw_to_v_calls = []
+        self.read_return_value = 1000  # Default raw reading
+        self.voltage_return_value = 2.5  # Default voltage
+
+    def read(self, rate, channel):
+        self.read_calls.append((rate, channel))
+        return self.read_return_value
+
+    def raw_to_v(self, raw):
+        self.raw_to_v_calls.append(raw)
+        return self.voltage_return_value
+
+
 # Global mock instances
 mock_machine = MockMachine()
 mock_os = MockOS()
 mock_datetime = MockDatetime()
 mock_ntptime = MockNTPTime()
 mock_time = MockTime()
+mock_ads1115 = MockADS1115()
