@@ -59,19 +59,20 @@ class MockMachine:
     def __init__(self):
         self.pins_created = []
         self.Pin = PinFactory(self)
+        self.I2C = type("MockI2C", (), {"init": lambda self, **kwargs: None})
 
     def unique_id(self) -> bytes:
         """Return a mock unique ID."""
         return b"mock-device-id-12345"
 
+    def reset(self) -> None:
+        """Mock reset function."""
+        pass
+
 
 # Mock os module
 class MockOS:
     """Mock os module."""
-
-    @staticmethod
-    def rename(old: str, new: str) -> None:
-        pass
 
     @staticmethod
     def stat(path: str) -> tuple:
@@ -80,6 +81,10 @@ class MockOS:
 
     @staticmethod
     def sync() -> None:
+        pass
+
+    @staticmethod
+    def rename(old: str, new: str) -> None:
         pass
 
 
@@ -147,9 +152,62 @@ class MockADS1115:
         return self.voltage_return_value
 
 
+# Mock for umqtt.simple module
+class MockMQTTClient:
+    def __init__(self, *args, **kwargs):
+        self.published_messages = []
+        self.connected = False
+        self.disconnect_called = False
+        self.connect_calls = []
+        self.subscribe_calls = []
+
+    def connect(self, *args, **kwargs):
+        self.connected = True
+        self.connect_calls.append((args, kwargs))
+
+    def disconnect(self):
+        self.connected = False
+        self.disconnect_called = True
+
+    def publish(self, topic, message, retain=False, qos=0):
+        self.published_messages.append((topic, message, retain, qos))
+
+    def subscribe(self, topic):
+        self.subscribe_calls.append(topic)
+
+    def check_msg(self):
+        return None
+
+    def wait_msg(self):
+        return None
+
+
+# Mock ADS1x15 module
+class MockADS1x15Module:
+    """Mock ads1x15 module with ADS1115 class."""
+
+    class ADS1115:
+        def __init__(self, i2c_bus=None, address=None, gain=None):
+            self.read_calls = []
+            self.raw_to_v_calls = []
+            self.read_return_value = 1000  # Default raw reading
+            self.voltage_return_value = 2.5  # Default voltage
+
+        def read(self, rate, channel):
+            self.read_calls.append((rate, channel))
+            return self.read_return_value
+
+        def raw_to_v(self, raw):
+            self.raw_to_v_calls.append(raw)
+            return self.voltage_return_value
+
+
 # Global mock instances
 mock_machine = MockMachine()
 mock_os = MockOS()
 mock_ntptime = MockNTPTime()
 mock_time = MockTime()
 mock_ads1115 = MockADS1115()
+mock_ads1x15 = MockADS1x15Module()
+MockUMQTTClass = type("MockUMQTT", (), {"MQTTClient": MockMQTTClient})
+mock_umqtt_simple = MockUMQTTClass()
