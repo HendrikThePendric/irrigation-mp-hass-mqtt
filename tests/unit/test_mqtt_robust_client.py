@@ -24,7 +24,7 @@ class MachineModule:
     unique_id = mock_machine.unique_id
     RTC = type("MockRTC", (), {"datetime": lambda self: (2024, 1, 1, 0, 0, 0, 0, 0)})
     Timer = type("MockTimer", (), {"init": lambda self, **kwargs: None, "ONE_SHOT": 0})
-    reset = lambda: None
+    reset = lambda: None  # type: ignore
 
 
 # Mock MQTTClient base class
@@ -99,11 +99,12 @@ class MockLogger:
 
 
 # Add all mock modules to sys.modules
-sys.modules["machine"] = MachineModule()
-sys.modules["os"] = mock_os
-sys.modules["ntptime"] = mock_ntptime
-sys.modules["time"] = mock_time
-sys.modules["ads1x15"] = mock_ads1x15
+# Add all mock modules to sys.modules
+sys.modules["machine"] = MachineModule()  # type: ignore
+sys.modules["os"] = mock_os  # type: ignore
+sys.modules["ntptime"] = mock_ntptime  # type: ignore
+sys.modules["time"] = mock_time  # type: ignore
+sys.modules["ads1x15"] = mock_ads1x15  # type: ignore
 # Create umqtt.simple module with MQTTClient
 mock_umqtt_simple = type("MockUMQTT", (), {"MQTTClient": MockMQTTClientBase})()
 
@@ -113,8 +114,8 @@ class MockUMQTTModule:
     simple = mock_umqtt_simple
 
 
-sys.modules["umqtt"] = MockUMQTTModule()
-sys.modules["umqtt.simple"] = mock_umqtt_simple
+sys.modules["umqtt"] = MockUMQTTModule()  # type: ignore
+sys.modules["umqtt.simple"] = mock_umqtt_simple  # type: ignore
 
 # Now import the modules to test
 from mqtt_robust_client import MqttRobustClient  # type: ignore
@@ -138,7 +139,7 @@ class TestMqttRobustClient(unittest.TestCase):
             user="test_user",
             password="test_password",
             keepalive=60,
-            logger=self.mock_logger,
+            logger=self.mock_logger,  # type: ignore
         )
 
         # Check initialization
@@ -147,7 +148,7 @@ class TestMqttRobustClient(unittest.TestCase):
         self.assertEqual(client.server, "test.broker.com")
         self.assertEqual(client.port, 1883)
         self.assertEqual(client.user, "test_user")
-        self.assertEqual(client.password, "test_password")
+        self.assertEqual(client.password, "test_password")  # type: ignore
         self.assertEqual(client.keepalive, 60)
         self.assertEqual(client._logger, self.mock_logger)
         self.assertIsNone(client._on_reconnect_callback)
@@ -162,7 +163,7 @@ class TestMqttRobustClient(unittest.TestCase):
         client = MqttRobustClient(
             client_id="test_client",
             server="test.broker.com",
-            logger=self.mock_logger,
+            logger=self.mock_logger,  # type: ignore
             on_reconnect_callback=test_callback,
         )
 
@@ -172,17 +173,19 @@ class TestMqttRobustClient(unittest.TestCase):
     def test_mqtt_robust_client_connect(self) -> None:
         """Test MqttRobustClient connect method."""
         client = MqttRobustClient(
-            client_id="test_client", server="test.broker.com", logger=self.mock_logger
+            client_id="test_client",
+            server="test.broker.com",
+            logger=self.mock_logger,  # type: ignore
         )
 
         # Initially not connected
-        self.assertFalse(client.connected)
+        self.assertFalse(client.connected)  # type: ignore
 
         # Call connect
         client.connect()
 
         # Should be connected now
-        self.assertTrue(client.connected)
+        self.assertTrue(client.connected)  # type: ignore
 
         # MqttRobustClient.connect() doesn't log on successful connection
         # It only logs on errors (reconnection attempts)
@@ -191,7 +194,9 @@ class TestMqttRobustClient(unittest.TestCase):
     def test_mqtt_robust_client_publish(self) -> None:
         """Test MqttRobustClient publish method."""
         client = MqttRobustClient(
-            client_id="test_client", server="test.broker.com", logger=self.mock_logger
+            client_id="test_client",
+            server="test.broker.com",
+            logger=self.mock_logger,  # type: ignore
         )
 
         # Connect first
@@ -204,8 +209,8 @@ class TestMqttRobustClient(unittest.TestCase):
         client.publish("test/topic", "test message", retain=True, qos=1)
 
         # Check that message was published
-        self.assertEqual(len(client.published_messages), 1)
-        topic, message, retain, qos = client.published_messages[0]
+        self.assertEqual(len(client.published_messages), 1)  # type: ignore
+        topic, message, retain, qos = client.published_messages[0]  # type: ignore
 
         self.assertEqual(topic, "test/topic")
         self.assertEqual(message, "test message")
@@ -219,7 +224,9 @@ class TestMqttRobustClient(unittest.TestCase):
     def test_mqtt_robust_client_subscribe(self) -> None:
         """Test MqttRobustClient subscribe method."""
         client = MqttRobustClient(
-            client_id="test_client", server="test.broker.com", logger=self.mock_logger
+            client_id="test_client",
+            server="test.broker.com",
+            logger=self.mock_logger,  # type: ignore
         )
 
         # Connect first
@@ -232,8 +239,8 @@ class TestMqttRobustClient(unittest.TestCase):
         client.subscribe("test/topic")
 
         # Check that topic was subscribed
-        self.assertEqual(len(client.subscribed_topics), 1)
-        self.assertEqual(client.subscribed_topics[0], "test/topic")
+        self.assertEqual(len(client.subscribed_topics), 1)  # type: ignore
+        self.assertEqual(client.subscribed_topics[0], "test/topic")  # type: ignore
 
         # MqttRobustClient doesn't override subscribe, so no logging
         # Base class subscribe doesn't log
@@ -242,7 +249,9 @@ class TestMqttRobustClient(unittest.TestCase):
     def test_mqtt_robust_client_check_msg(self) -> None:
         """Test MqttRobustClient check_msg method."""
         client = MqttRobustClient(
-            client_id="test_client", server="test.broker.com", logger=self.mock_logger
+            client_id="test_client",
+            server="test.broker.com",
+            logger=self.mock_logger,  # type: ignore
         )
 
         # Connect first
@@ -256,12 +265,14 @@ class TestMqttRobustClient(unittest.TestCase):
 
         # MqttRobustClient.check_msg() calls super().wait_msg()
         # So wait_msg_called should be True
-        self.assertTrue(client.wait_msg_called)
+        self.assertTrue(client.wait_msg_called)  # type: ignore
 
     def test_mqtt_robust_client_wait_msg(self) -> None:
         """Test MqttRobustClient wait_msg method."""
         client = MqttRobustClient(
-            client_id="test_client", server="test.broker.com", logger=self.mock_logger
+            client_id="test_client",
+            server="test.broker.com",
+            logger=self.mock_logger,  # type: ignore
         )
 
         # Connect first
@@ -274,17 +285,19 @@ class TestMqttRobustClient(unittest.TestCase):
         self.assertIsNone(result)
 
         # wait_msg() should set wait_msg_called
-        self.assertTrue(client.wait_msg_called)
+        self.assertTrue(client.wait_msg_called)  # type: ignore
 
     def test_mqtt_robust_client_disconnect(self) -> None:
         """Test MqttRobustClient disconnect method."""
         client = MqttRobustClient(
-            client_id="test_client", server="test.broker.com", logger=self.mock_logger
+            client_id="test_client",
+            server="test.broker.com",
+            logger=self.mock_logger,  # type: ignore
         )
 
         # Connect first
         client.connect()
-        self.assertTrue(client.connected)
+        self.assertTrue(client.connected)  # type: ignore
 
         # Clear logs
         self.mock_logger.messages.clear()
@@ -293,8 +306,8 @@ class TestMqttRobustClient(unittest.TestCase):
         client.disconnect()
 
         # Should be disconnected
-        self.assertFalse(client.connected)
-        self.assertTrue(client.disconnect_called)
+        self.assertFalse(client.connected)  # type: ignore
+        self.assertTrue(client.disconnect_called)  # type: ignore
 
         # MqttRobustClient doesn't override disconnect, so no logging
         # Base class disconnect doesn't log
