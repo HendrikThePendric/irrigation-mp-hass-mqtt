@@ -74,17 +74,72 @@ class MockMachine:
 class MockOS:
     """Mock os module."""
 
-    @staticmethod
-    def stat(path: str) -> tuple:
+    # Essential attributes for unittest and standard library
+    name = "posix"
+    sep = "/"
+    supports_dir_fd = False
+    supports_bytes_environ = True
+    supports_effective_ids = True
+    supports_fd = True
+    supports_follow_symlinks = True
+
+    # Functions needed by shutil and other stdlib modules
+    # Use regular functions, not static methods, so they can be put in sets
+    def open(self, path: str, mode: str = "r"):
+        raise NotImplementedError("MockOS.open not implemented")
+
+    def unlink(self, path: str):
+        pass
+
+    def rmdir(self, path: str):
+        pass
+
+    def listdir(self, path: str = "."):
+        return []
+
+    def makedirs(self, path: str, exist_ok: bool = False):
+        pass
+
+    def remove(self, path: str):
+        pass
+
+    def getcwd(self):
+        return "/mock/cwd"
+
+    # stat_result class needed by shutil module
+    class stat_result:
+        st_file_attributes = 0
+
+    # Add path submodule
+    class path:
+        @staticmethod
+        def join(*args: str) -> str:
+            return "/".join(args)
+
+        @staticmethod
+        def exists(path: str) -> bool:
+            return True
+
+        @staticmethod
+        def isfile(path: str) -> bool:
+            return True
+
+        @staticmethod
+        def isdir(path: str) -> bool:
+            return False
+
+        @staticmethod
+        def getsize(path: str) -> int:
+            return 1000
+
+    def stat(self, path: str) -> tuple:
         # Return a tuple with st_size at index 6
         return (0, 0, 0, 0, 0, 0, 1000)
 
-    @staticmethod
-    def sync() -> None:
+    def sync(self) -> None:
         pass
 
-    @staticmethod
-    def rename(old: str, new: str) -> None:
+    def rename(self, old: str, new: str) -> None:
         pass
 
 
@@ -182,6 +237,22 @@ class MockMQTTClient:
         return None
 
 
+# Mock SSL/TLS module for MQTT over TLS tests
+class MockSSLContext:
+    def __init__(self, protocol):
+        self.protocol = protocol
+        self.cafile = None
+        self.certfile = None
+        self.keyfile = None
+
+    def load_verify_locations(self, cafile=None):
+        self.cafile = cafile
+
+    def load_cert_chain(self, certfile=None, keyfile=None):
+        self.certfile = certfile
+        self.keyfile = keyfile
+
+
 # Mock ADS1x15 module
 class MockADS1x15Module:
     """Mock ads1x15 module with ADS1115 class."""
@@ -211,3 +282,4 @@ mock_ads1115 = MockADS1115()
 mock_ads1x15 = MockADS1x15Module()
 MockUMQTTClass = type("MockUMQTT", (), {"MQTTClient": MockMQTTClient})
 mock_umqtt_simple = MockUMQTTClass()
+mock_ssl_context = MockSSLContext

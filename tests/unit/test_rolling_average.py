@@ -1,5 +1,6 @@
 """Test rolling_average.py using unittest framework."""
 
+# pyright: basic
 import sys
 
 # For MicroPython compatibility, use simple path manipulation

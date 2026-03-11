@@ -1,5 +1,6 @@
 """Test watchdog.py using unittest framework."""
 
+# pyright: basic
 import sys
 
 # Setup paths

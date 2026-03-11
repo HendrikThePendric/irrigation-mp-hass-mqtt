@@ -1,9 +1,9 @@
 from machine import Timer
 from mqtt_robust_client import MqttRobustClient
-from umqtt.simple import MQTTClient
+
 from config import Config
 from logger import Logger
-from irrigation_station import IrrigationStation
+
 from mqtt_hass_entities import MqttHassSensor, MqttHassValve, MessagerParams
 from ssl import SSLContext, PROTOCOL_TLS_CLIENT
 from time import ticks_ms

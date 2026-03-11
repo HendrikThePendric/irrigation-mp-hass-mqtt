@@ -1,5 +1,6 @@
 """Test mqtt_robust_client.py using unittest framework."""
 
+# pyright: basic
 import sys
 
 # Setup paths

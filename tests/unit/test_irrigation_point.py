@@ -1,5 +1,6 @@
 """Test irrigation_point.py using unittest framework."""
 
+# pyright: basic
 import sys
 
 # Setup paths
@@ -7,11 +8,14 @@ sys.path.insert(0, "src")
 sys.path.insert(0, "tests")
 
 # Import simple mocks
-from simple_mocks import (MockPin,
+from simple_mocks import (
+    MockPin,
     mock_machine,
-    mock_os, mock_ntptime,
+    mock_os,
+    mock_ntptime,
     mock_time,
-    mock_ads1115,)
+    mock_ads1115,
+)
 
 
 # Create mock modules before importing ANY project code

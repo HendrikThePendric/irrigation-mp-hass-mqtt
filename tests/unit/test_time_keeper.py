@@ -1,5 +1,6 @@
 """Test time_keeper.py using unittest framework."""
 
+# pyright: basic
 import sys
 
 # Setup paths

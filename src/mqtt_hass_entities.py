@@ -3,8 +3,6 @@ from json import dumps
 from umqtt.simple import MQTTClient
 from logger import Logger
 
-from irrigation_station import IrrigationPoint
-
 
 from collections import namedtuple
 

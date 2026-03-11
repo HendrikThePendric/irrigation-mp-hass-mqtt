@@ -1,6 +1,5 @@
 from typing import Callable
 from os import rename, stat, sync
-import sys
 
 
 LOG_FILE_PATH = "./log.txt"

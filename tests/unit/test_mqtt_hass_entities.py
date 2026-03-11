@@ -1,5 +1,6 @@
 """Test mqtt_hass_entities.py using unittest framework."""
 
+# pyright: basic
 import sys
 import json
 

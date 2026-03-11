@@ -1,5 +1,5 @@
 from machine import Timer, reset
-from time import sleep
+
 from logger import Logger
 
 

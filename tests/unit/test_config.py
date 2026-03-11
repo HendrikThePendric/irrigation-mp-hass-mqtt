@@ -1,5 +1,6 @@
 """Test config.py using unittest framework."""
 
+# pyright: basic
 import sys
 import json
 

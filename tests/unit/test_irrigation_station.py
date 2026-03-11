@@ -1,5 +1,6 @@
 """Test irrigation_station.py using unittest framework."""
 
+# pyright: basic
 import sys
 
 # Setup paths
