@@ -21,6 +21,7 @@ from simple_mocks import (
 class MachineModule:
     Pin = mock_machine.Pin
     unique_id = mock_machine.unique_id
+    Timer = mock_machine.Timer
 
     # Mock RTC class
     class RTC:
@@ -31,18 +32,6 @@ class MachineModule:
         def datetime(self):
             self.datetime_calls.append(())
             return self.datetime_return
-
-    # Mock Timer class
-    class Timer:
-        PERIODIC = 1
-        ONE_SHOT = 0
-
-        def __init__(self, id):
-            self.id = id
-            self.init_calls = []
-
-        def init(self, period, mode, callback):
-            self.init_calls.append((period, mode, callback))
 
     reset = lambda: None
 

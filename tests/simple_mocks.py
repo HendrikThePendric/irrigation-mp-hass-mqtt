@@ -52,6 +52,77 @@ class PinFactory:
         return pin
 
 
+# Mock Timer class
+class MockTimer:
+    """Mock machine.Timer class with expiration simulation."""
+
+    ONE_SHOT = 0
+    PERIODIC = 1
+
+    def __init__(self):
+        self.init_calls = []
+        self.callback = None
+        self.period = 0
+        self.mode = self.ONE_SHOT
+        self.active = False
+        self.elapsed_time = 0
+        self.timer_id = id(self)  # Unique ID for this timer
+        self.id = -1  # Timer ID parameter
+
+    def init(self, period, mode, callback):
+        """Initialize timer with period, mode, and callback."""
+        self.init_calls.append((period, mode, callback))
+        self.period = period
+        self.mode = mode
+        self.callback = callback
+        self.active = True
+        self.elapsed_time = 0
+
+    def deinit(self):
+        """Deinitialize timer."""
+        self.active = False
+        self.callback = None
+
+    def simulate_expiration(self):
+        """Simulate timer expiration by calling callback if active."""
+        if self.active and self.callback:
+            # Call the callback with timer object as argument
+            self.callback(self)
+            # If ONE_SHOT mode, deactivate after firing
+            if self.mode == self.ONE_SHOT:
+                self.active = False
+
+    def simulate_time_passed(self, ms):
+        """Simulate time passing and check if timer should expire."""
+        if not self.active:
+            return
+
+        self.elapsed_time += ms
+        if self.elapsed_time >= self.period:
+            self.simulate_expiration()
+            # Reset elapsed time for periodic timers
+            if self.mode == self.PERIODIC:
+                self.elapsed_time = 0
+
+
+# Timer factory to track timer creations
+class TimerFactory:
+    """Factory that creates MockTimer instances and tracks them."""
+
+    ONE_SHOT = MockTimer.ONE_SHOT
+    PERIODIC = MockTimer.PERIODIC
+
+    def __init__(self, mock_machine):
+        self.mock_machine = mock_machine
+
+    def __call__(self, id=-1):
+        """Create a mock timer."""
+        timer = MockTimer()
+        timer.id = id  # Store the ID for compatibility
+        self.mock_machine.timers_created.append(timer)
+        return timer
+
+
 # Create a simple mock machine module
 class MockMachine:
     """Mock machine module."""
@@ -60,6 +131,8 @@ class MockMachine:
         self.pins_created = []
         self.Pin = PinFactory(self)
         self.I2C = type("MockI2C", (), {"init": lambda self, **kwargs: None})
+        self.Timer = TimerFactory(self)
+        self.timers_created = []
 
     def unique_id(self) -> bytes:
         """Return a mock unique ID."""
@@ -82,6 +155,9 @@ class MockOS:
     supports_effective_ids = True
     supports_fd = True
     supports_follow_symlinks = True
+
+    # Mock environ dictionary
+    environ = {}
 
     # Functions needed by shutil and other stdlib modules
     # Use regular functions, not static methods, so they can be put in sets
@@ -132,6 +208,13 @@ class MockOS:
         def getsize(path: str) -> int:
             return 1000
 
+        @staticmethod
+        def basename(path: str) -> str:
+            """Mock basename function."""
+            if "/" in path:
+                return path.split("/")[-1]
+            return path
+
     def stat(self, path: str) -> tuple:
         # Return a tuple with st_size at index 6
         return (0, 0, 0, 0, 0, 0, 1000)
@@ -141,6 +224,11 @@ class MockOS:
 
     def rename(self, old: str, new: str) -> None:
         pass
+
+    @staticmethod
+    def isatty(fd):
+        """Mock isatty function."""
+        return False
 
 
 # Mock ntptime module
@@ -186,6 +274,11 @@ class MockTime:
         """Mock gmtime - returns a fixed time tuple."""
         # Return a fixed time: (2024, 1, 1, 0, 0, 0, 0, 0)
         return (2024, 1, 1, 0, 0, 0, 0, 0)
+
+    @staticmethod
+    def perf_counter():
+        """Mock perf_counter."""
+        return 0.0
 
 
 # Mock ADS1x15 module for ADC
