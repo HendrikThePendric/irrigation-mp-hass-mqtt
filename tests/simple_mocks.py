@@ -329,6 +329,24 @@ class MockMQTTClient:
     def wait_msg(self):
         return None
 
+    def set_last_will(self, topic, message, retain=False, qos=0):
+        self.last_will_topic = topic
+        self.last_will_message = message
+        self.last_will_retain = retain
+        self.last_will_qos = qos
+
+    def set_callback(self, callback):
+        self.callback = callback
+
+    @property
+    def sock(self):
+        # Return a mock socket
+        class MockSocket:
+            def setblocking(self, *args):
+                pass
+
+        return MockSocket()
+
 
 # Mock SSL/TLS module for MQTT over TLS tests
 class MockSSLContext:

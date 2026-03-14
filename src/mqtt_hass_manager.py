@@ -1,8 +1,8 @@
-from machine import Timer
 from mqtt_robust_client import MqttRobustClient
 
 from config import Config
 from logger import Logger
+from irrigation_states import ValveState, SensorState
 
 from mqtt_hass_entities import MqttHassSensor, MqttHassValve, MessagerParams
 from ssl import SSLContext, PROTOCOL_TLS_CLIENT
@@ -31,11 +31,7 @@ class MqttHassManager:
     ) -> None:
         self._config = config
         self._logger = logger
-        self._timer = Timer(-1)
-        self._broker_connectivity_timer = Timer(-1)
-        self._pending_publish = False
         self._pending_reconnect = False
-        self._pending_broker_connectivity_test = False
         self._received_messages: list[tuple[str, str]] = []
         self._availability_topic = f"irrigation/{self._config.station_id}/availability"
         self._broker_connectivity_topic = (
@@ -67,8 +63,6 @@ class MqttHassManager:
         self._set_online()
         self._setup_entities()
         self._monitor_hass_status()
-        self._start_periodic_publish()
-        self._start_broker_connectivity_monitoring()
 
     def check_msg(self) -> None:
         self._client.check_msg()
@@ -77,14 +71,83 @@ class MqttHassManager:
         """Process incoming MQTT messages and store them."""
         self.check_msg()
 
-    def get_station_instructions(self) -> list[tuple[str, str]]:
-        """Return and clear the list of received messages as station instructions."""
-        return self.read_received_messages()
+    def get_station_instructions(self) -> list[ValveState]:
+        """Return valve commands from received MQTT messages."""
+        commands: list[ValveState] = []
+        valve_messages: list[tuple[str, str]] = []
 
-    def send_status_updates(self, status_updates: list[tuple[str, str]]) -> None:
-        """Send status updates via MQTT."""
-        for topic, payload in status_updates:
-            self.send_message(topic, payload)
+        # Filter and process valve commands
+        for topic, payload in self._received_messages:
+            if topic.endswith("/valve/set"):
+                # Extract point_id from topic: irrigation/{station_id}/{point_id}/valve/set
+                parts = topic.split("/")
+                if (
+                    len(parts) >= 4
+                    and parts[0] == "irrigation"
+                    and parts[1] == self._config.station_id
+                ):
+                    point_id = parts[2]
+                    try:
+                        commands.append(ValveState(point_id, payload.strip().lower()))
+                    except ValueError as e:
+                        self._logger.log("Invalid valve command: " + str(e))
+                else:
+                    self._logger.log("Malformed valve command topic: " + topic)
+                valve_messages.append((topic, payload))
+
+        # Remove processed valve messages from received messages
+        for msg in valve_messages:
+            if msg in self._received_messages:
+                self._received_messages.remove(msg)
+
+        return commands
+
+    def publish_valve_states(self, valve_states: list[ValveState]) -> None:
+        """Publish valve states via MQTT."""
+        for valve_state in valve_states:
+            topic = (
+                "irrigation/"
+                + self._config.station_id
+                + "/"
+                + valve_state.point_id
+                + "/valve/state"
+            )
+            self._client.publish(topic, valve_state.state, retain=True)
+            self._logger.log(
+                "Published valve state: "
+                + valve_state.point_id
+                + " = "
+                + valve_state.state
+            )
+
+    def publish_sensor_states(self, sensor_states: list[SensorState]) -> None:
+        """Publish sensor readings via MQTT."""
+        for sensor_state in sensor_states:
+            topic = (
+                "irrigation/"
+                + self._config.station_id
+                + "/"
+                + sensor_state.point_id
+                + "/sensor"
+            )
+            # Convert 0.0-1.0 to percentage 0-100%
+            moisture_percent = round(sensor_state.moisture * 100, 1)
+            payload = '{"moisture": ' + str(moisture_percent) + "}"
+            self._client.publish(topic, payload, retain=True)
+            self._logger.log(
+                "Published sensor reading: "
+                + sensor_state.point_id
+                + " = "
+                + str(moisture_percent)
+                + "%"
+            )
+
+    def test_broker_connectivity(self) -> None:
+        """Test MQTT broker connectivity."""
+        current_time = ticks_ms()
+        test_payload = "broker_connectivity_test_" + str(current_time)
+        self._client.publish(self._broker_connectivity_topic, test_payload, qos=1)
+        self._logger.log("Broker connectivity test: " + test_payload)
 
     def _handle_pending_reconnect(self) -> None:
         self._logger.log(
@@ -106,13 +169,6 @@ class MqttHassManager:
             self._logger.log("Resubscribed to all command topics after reconnection")
         except Exception as e:
             self._logger.log(f"Failed to resubscribe after reconnection: {e}")
-
-    def _handle_pending_broker_connectivity_test(self) -> None:
-        current_time = ticks_ms()
-        test_payload = f"broker_connectivity_test_{current_time}"
-
-        self._client.publish(self._broker_connectivity_topic, test_payload, qos=1)
-        self._logger.log(f"Broker connectivity test acknowledged: {test_payload}")
 
     def read_received_messages(self) -> list[tuple[str, str]]:
         """Return and clear the list of received messages."""
@@ -189,27 +245,6 @@ class MqttHassManager:
             return
 
         # Note: Valve command handling is now done in IrrigationStation
-
-    def _start_periodic_publish(self) -> None:
-        self._timer.init(
-            period=self._config.publish_interval_ms,
-            mode=Timer.PERIODIC,
-            callback=self._set_pending_publish,
-        )
-
-    def _set_pending_publish(self, _=None) -> None:
-        self._pending_publish = True
-
-    def _start_broker_connectivity_monitoring(self) -> None:
-        self._broker_connectivity_timer.init(
-            period=BROKER_CONNECTIVITY_TEST_INTERVAL,
-            mode=Timer.PERIODIC,
-            callback=self._set_pending_broker_connectivity_test,
-        )
-        self._logger.log("Broker connectivity monitoring started")
-
-    def _set_pending_broker_connectivity_test(self, _=None) -> None:
-        self._pending_broker_connectivity_test = True
 
     def _monitor_hass_status(self) -> None:
         try:

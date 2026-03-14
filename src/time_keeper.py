@@ -1,5 +1,5 @@
 import ntptime
-from machine import RTC, Timer, reset
+from machine import RTC, reset
 import datetime
 from time import sleep
 from logger import Logger
@@ -13,11 +13,9 @@ class TimeKeeper:
         self, logger: Logger, sync_interval: int = 7200, retry_interval: int = 60
     ) -> None:
         self._rtc: RTC = RTC()
-        self._sync_timer: Timer = Timer(-1)
-        self._sync_interval_ms: int = sync_interval * 1000  # Already in milliseconds
-        self._retry_interval_ms: int = retry_interval * 1000
+        self._sync_interval: int = sync_interval
+        self._retry_interval: int = retry_interval
         self._logger: Logger = logger
-        self._pending_ntp_sync = False
         ntptime.host = "nl.pool.ntp.org"
 
     def initialize_ntp_synchronization(self) -> None:
@@ -39,38 +37,15 @@ class TimeKeeper:
             self._logger.log("Failed to sync NTP, resetting")
             reset()
 
-        self._schedule_normal_sync()
-
-    def _schedule_normal_sync(self) -> None:
-        self._sync_timer.init(
-            period=self._sync_interval_ms,
-            mode=Timer.ONE_SHOT,
-            callback=self._set_pending_ntp_sync,
-        )
-
-    def _schedule_retry(self) -> None:
-        self._sync_timer.init(
-            period=self._retry_interval_ms,
-            mode=Timer.ONE_SHOT,
-            callback=self._set_pending_ntp_sync,
-        )
-
-    def _set_pending_ntp_sync(self, _=None) -> None:
-        self._pending_ntp_sync = True
-
-    def handle_pending_ntp_sync(self) -> None:
-        if not self._pending_ntp_sync:
-            return
+    def sync_time(self) -> bool:
+        """Attempt to sync time with NTP server."""
         try:
             ntptime.settime()
             self._logger.log("NTP sync successful")
-            self._schedule_normal_sync()
+            return True
         except OSError:
-            self._logger.log(
-                f"NTP sync failed retrying again in {self._retry_interval_ms // 1000}s"
-            )
-            self._schedule_retry()
-        self._pending_ntp_sync = False
+            self._logger.log(f"NTP sync failed, will retry in {self._retry_interval}s")
+            return False
 
     def get_current_cet_datetime_str(self) -> str:
         """Return formatted CET string"""

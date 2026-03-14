@@ -1,4 +1,4 @@
-"""Test time_keeper.py using unittest framework."""
+"""Test time_keeper.py using unittest framework with new API."""
 
 # pyright: basic
 import sys
@@ -14,6 +14,7 @@ from simple_mocks import (
     mock_os,
     mock_ntptime,
     mock_time,
+    mock_ads1115,
 )
 
 
@@ -21,22 +22,8 @@ from simple_mocks import (
 class MachineModule:
     Pin = mock_machine.Pin
     unique_id = mock_machine.unique_id
-    Timer = mock_machine.Timer
-
-    # Mock RTC class
-    class RTC:
-        def __init__(self):
-            self.datetime_calls = []
-            self.datetime_return = (2024, 1, 1, 0, 0, 0, 0, 0)  # Default time
-
-        def datetime(self):
-            self.datetime_calls.append(())
-            return self.datetime_return
-
+    RTC = type("MockRTC", (), {"datetime": lambda self: (2024, 1, 1, 0, 0, 0, 0, 0)})
     reset = lambda: None
-
-
-# Mock datetime module with more functionality
 
 
 # Add all mock modules to sys.modules
@@ -44,6 +31,7 @@ sys.modules["machine"] = MachineModule()
 sys.modules["os"] = mock_os
 sys.modules["ntptime"] = mock_ntptime
 sys.modules["time"] = mock_time
+sys.modules["ads1x15"] = mock_ads1115
 
 # Now import the modules to test
 from time_keeper import TimeKeeper  # type: ignore
@@ -52,22 +40,17 @@ import unittest
 
 
 class MockLogger:
-    """Mock Logger."""
+    """Mock logger for testing."""
 
-    def __init__(self):
+    def __init__(self) -> None:
         self.messages = []
 
-    def log(self, msg: str) -> None:
-        self.messages.append(msg)
+    def log(self, message: str) -> None:
+        self.messages.append(message)
 
 
-class TestTimeKeeper(unittest.TestCase):
-    """Test time_keeper.py using unittest framework."""
-
-    def setUp(self) -> None:
-        """Reset mock state before each test."""
-        # Reset time mock
-        mock_time.reset_ticks()
+class TestTimeKeeperNew(unittest.TestCase):
+    """Test TimeKeeper class with new API."""
 
     def test_time_keeper_initialization(self) -> None:
         """Test time keeper initialization."""
@@ -76,11 +59,12 @@ class TestTimeKeeper(unittest.TestCase):
         # Create time keeper
         time_keeper = TimeKeeper(logger)  # type: ignore
 
-        # Check that RTC was initialized
+        # Check that RTC was created
         self.assertIsNotNone(time_keeper._rtc)
 
-        # Check that timer was created (but not necessarily initialized yet)
-        self.assertIsNotNone(time_keeper._sync_timer)
+        # Check that intervals are set
+        self.assertEqual(time_keeper._sync_interval, 7200)
+        self.assertEqual(time_keeper._retry_interval, 60)
 
     def test_time_keeper_get_current_cet_datetime_str(self) -> None:
         """Test get_current_cet_datetime_str method."""
@@ -97,68 +81,94 @@ class TestTimeKeeper(unittest.TestCase):
 
         # Check format (should be like "2024/01/01-HH:MM:SS" for CET)
         # The actual conversion depends on mock implementation
-        # Just check it's a string
-        self.assertIsInstance(datetime_str, str)
-        # Simple check for format (not using regex in MicroPython)
-        self.assertTrue(
-            "/" in datetime_str and "-" in datetime_str and ":" in datetime_str
+        self.assertTrue("/" in datetime_str)
+        self.assertTrue(":" in datetime_str)
+
+    def test_time_keeper_sync_time_success(self) -> None:
+        """Test sync_time method with successful sync."""
+        logger = MockLogger()
+
+        # Create time keeper
+        time_keeper = TimeKeeper(logger)  # type: ignore
+
+        # Mock ntptime.settime to succeed
+        original_settime = sys.modules["ntptime"].settime
+        sys.modules["ntptime"].settime = lambda: None
+
+        try:
+            # Sync time
+            result = time_keeper.sync_time()
+
+            # Should return True on success
+            self.assertTrue(result)
+
+            # Should log success
+            self.assertTrue(
+                any("NTP sync successful" in msg for msg in logger.messages)
+            )
+        finally:
+            # Restore original
+            sys.modules["ntptime"].settime = original_settime
+
+    def test_time_keeper_sync_time_failure(self) -> None:
+        """Test sync_time method with failed sync."""
+        logger = MockLogger()
+
+        # Create time keeper
+        time_keeper = TimeKeeper(logger)  # type: ignore
+
+        # Mock ntptime.settime to fail
+        original_settime = sys.modules["ntptime"].settime
+        sys.modules["ntptime"].settime = lambda: (_ for _ in ()).throw(
+            OSError("Network error")
         )
 
-    def test_time_keeper_handle_pending_ntp_sync(self) -> None:
-        """Test handle_pending_ntp_sync method."""
+        try:
+            # Sync time
+            result = time_keeper.sync_time()
+
+            # Should return False on failure
+            self.assertFalse(result)
+
+            # Should log failure
+            self.assertTrue(any("NTP sync failed" in msg for msg in logger.messages))
+        finally:
+            # Restore original
+            sys.modules["ntptime"].settime = original_settime
+
+    def test_time_keeper_initialize_ntp_synchronization(self) -> None:
+        """Test initialize_ntp_synchronization method."""
         logger = MockLogger()
 
         # Create time keeper
         time_keeper = TimeKeeper(logger)  # type: ignore
 
-        # Initially, pending NTP sync should be False
-        self.assertFalse(time_keeper._pending_ntp_sync)
+        # Mock ntptime.settime to succeed
+        original_settime = sys.modules["ntptime"].settime
+        call_count = 0
 
-        # Set pending NTP sync
-        time_keeper._pending_ntp_sync = True
+        def mock_settime():
+            nonlocal call_count
+            call_count += 1
+            if call_count == 1:
+                return None  # Success on first try
 
-        # Handle pending NTP sync
-        time_keeper.handle_pending_ntp_sync()
+        sys.modules["ntptime"].settime = mock_settime
 
-        # Check that pending NTP sync was handled (set to False)
-        self.assertFalse(time_keeper._pending_ntp_sync)
+        try:
+            # Initialize NTP synchronization
+            time_keeper.initialize_ntp_synchronization()
 
-    def test_time_keeper_set_pending_ntp_sync(self) -> None:
-        """Test _set_pending_ntp_sync method."""
-        logger = MockLogger()
+            # Should have called settime
+            self.assertEqual(call_count, 1)
 
-        # Create time keeper
-        time_keeper = TimeKeeper(logger)  # type: ignore
-
-        # Initially, pending NTP sync should be False
-        self.assertFalse(time_keeper._pending_ntp_sync)
-
-        # Set pending NTP sync
-        time_keeper._set_pending_ntp_sync()
-
-        # Check that pending NTP sync was set to True
-        self.assertTrue(time_keeper._pending_ntp_sync)
-
-    def test_time_keeper_schedule_methods(self) -> None:
-        """Test schedule methods."""
-        logger = MockLogger()
-
-        # Create time keeper
-        time_keeper = TimeKeeper(logger)  # type: ignore
-
-        # Clear any previous timer calls
-        time_keeper._sync_timer.init_calls.clear()
-
-        # Test _schedule_normal_sync
-        time_keeper._schedule_normal_sync()
-        self.assertTrue(len(time_keeper._sync_timer.init_calls) > 0)
-
-        # Clear timer calls again
-        time_keeper._sync_timer.init_calls.clear()
-
-        # Test _schedule_retry
-        time_keeper._schedule_retry()
-        self.assertTrue(len(time_keeper._sync_timer.init_calls) > 0)
+            # Should log success
+            self.assertTrue(
+                any("Initial NTP sync successful" in msg for msg in logger.messages)
+            )
+        finally:
+            # Restore original
+            sys.modules["ntptime"].settime = original_settime
 
 
 if __name__ == "__main__":

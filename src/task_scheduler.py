@@ -13,8 +13,8 @@ class Task:
             interval_seconds: Time between executions in seconds
         """
         self.interval_seconds = interval_seconds
-        self.last_completion_time: float = time()
-        self._is_due = False
+        self.last_completion_time: float = 0.0  # Will be set on first complete()
+        self._is_due = True  # Tasks are due immediately on startup
 
     def update_status(self, current_time: float) -> None:
         """
@@ -79,6 +79,16 @@ class TaskScheduler:
     def update(self) -> None:
         """Update status of all tasks based on current time."""
         current_time = time()
-        for _attr_name, attr_value in self.__dict__.items():
-            if isinstance(attr_value, Task):
-                attr_value.update_status(current_time)
+        # Use explicit iteration instead of __dict__ for MicroPython compatibility
+        for attr_name in [
+            "wifi_check",
+            "ntp_sync",
+            "sensor_measurement",
+            "mqtt_publish",
+            "broker_test",
+            "garbage_collect",
+            "led_update",
+        ]:
+            task = getattr(self, attr_name, None)
+            if isinstance(task, Task):
+                task.update_status(current_time)

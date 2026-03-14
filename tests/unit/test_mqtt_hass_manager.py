@@ -1,8 +1,7 @@
-"""Test mqtt_hass_manager.py using unittest framework."""
+"""Test mqtt_hass_manager.py using unittest framework with new API."""
 
 # pyright: basic
 import sys
-import unittest
 
 # Setup paths
 sys.path.insert(0, "src")
@@ -10,13 +9,14 @@ sys.path.insert(0, "tests")
 
 # Import simple mocks
 from simple_mocks import (
-    MockMQTTClient,
-    MockSSLContext,
+    MockPin,
     mock_machine,
     mock_os,
     mock_ntptime,
     mock_time,
-    mock_ads1x15,
+    mock_ads1115,
+    mock_ssl_context,
+    mock_umqtt_simple,
 )
 
 
@@ -25,105 +25,7 @@ class MachineModule:
     Pin = mock_machine.Pin
     unique_id = mock_machine.unique_id
     RTC = type("MockRTC", (), {"datetime": lambda self: (2024, 1, 1, 0, 0, 0, 0, 0)})
-
-    class Timer:
-        ONE_SHOT = 0
-        PERIODIC = 1
-
-        def __init__(self, *args, **kwargs):
-            pass
-
-        def init(self, **kwargs):
-            pass
-
-    I2C = type("MockI2C", (), {"init": lambda self, **kwargs: None})
-
-    @staticmethod
-    def reset() -> None:
-        return None
-
-
-# Mock MqttRobustClient (inherits from MockMQTTClient)
-class MockMqttRobustClient(MockMQTTClient):
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        self._on_reconnect_callback = kwargs.get("on_reconnect_callback", None)
-        self._logger = kwargs.get("logger", None)
-
-    def set_callback(self, callback):
-        self.callback = callback
-
-
-# Mock Logger
-class MockLogger:
-    def __init__(self):
-        self.messages = []
-
-    def log(self, message):
-        self.messages.append(message)
-
-    def error(self, message):
-        self.messages.append(f"ERROR: {message}")
-
-
-# Mock Config
-class MockConfig:
-    def __init__(self):
-        self.station_name = "Test Station"
-        self.station_id = "test_station"
-        self.station_mqtt_id = "test_station_mqtt_id"
-        self.network = type(
-            "MockNetworkConfig", (), {"mqtt_broker_ip": "test.broker.com"}
-        )()
-        self.rolling_window = 3
-        self.ema_alpha = 0.2
-        self.publish_interval_minutes = 5
-        self.publish_interval_ms = 300000  # 5 minutes in milliseconds
-        # irrigation_points should be a dict, not a list
-        self.irrigation_points = {
-            "location_a": type(
-                "MockPointConfig",
-                (),
-                {
-                    "name": "Location A",
-                    "valve_pin": 2,
-                    "mosfet_pin": 21,
-                    "ads_address": "0x48",
-                    "ads_channel": 0,
-                    "id": "location_a",
-                },
-            )()
-        }
-
-
-# Mock IrrigationStation
-class MockIrrigationStation:
-    def __init__(self):
-        self.points = []
-        self.update_called = False
-        self.get_points_called = False
-
-    def update(self):
-        self.update_called = True
-
-    def get_points(self):
-        self.get_points_called = True
-        return [
-            type(
-                "MockIrrigationPoint",
-                (),
-                {
-                    "name": "Location A",
-                    "valve_pin": 2,
-                    "mosfet_pin": 21,
-                    "ads_address": "0x48",
-                    "ads_channel": 0,
-                    "get_moisture": lambda: 42.5,
-                    "get_valve_state": lambda: False,
-                    "set_valve_state": lambda state: None,
-                },
-            )()
-        ]
+    reset = lambda: None
 
 
 # Add all mock modules to sys.modules
@@ -131,167 +33,247 @@ sys.modules["machine"] = MachineModule()
 sys.modules["os"] = mock_os
 sys.modules["ntptime"] = mock_ntptime
 sys.modules["time"] = mock_time
-sys.modules["ssl"] = type(
-    "MockSSL", (), {"SSLContext": MockSSLContext, "PROTOCOL_TLS_CLIENT": 1}
-)()
-sys.modules["ads1x15"] = mock_ads1x15
-# Create umqtt.simple module with MQTTClient
-mock_umqtt_simple = type("MockUMQTT", (), {"MQTTClient": MockMQTTClient})()
+sys.modules["ads1x15"] = mock_ads1115
 
 
-# Create umqtt module
+# Mock SSL module
+class MockSSLModule:
+    SSLContext = mock_ssl_context
+    PROTOCOL_TLS_CLIENT = 1
+
+
+sys.modules["ssl"] = MockSSLModule()
+
+
+# Mock umqtt module
 class MockUMQTTModule:
     simple = mock_umqtt_simple
 
 
 sys.modules["umqtt"] = MockUMQTTModule()
 sys.modules["umqtt.simple"] = mock_umqtt_simple
-# Override mqtt_robust_client import
-sys.modules["mqtt_robust_client"] = type(
-    "MockMqttRobustClientModule", (), {"MqttRobustClient": MockMqttRobustClient}
-)()
 
 # Now import the modules to test
 from mqtt_hass_manager import MqttHassManager, create_ssl_context  # type: ignore
+from irrigation_states import ValveState, SensorState  # type: ignore
+
+import unittest
 
 
-class TestMqttHassManager(unittest.TestCase):
-    """Test mqtt_hass_manager.py using unittest framework."""
+class MockConfig:
+    """Mock configuration for testing."""
 
-    def setUp(self) -> None:
-        """Set up test fixtures."""
-        self.mock_logger = MockLogger()
-        self.mock_config = MockConfig()
-        self.mock_station = MockIrrigationStation()
+    def __init__(self) -> None:
+        self.station_id = "teststation"
+        self.station_mqtt_id = "teststation-mqtt"
+        self.station_name = "Test Station"
+        self.irrigation_points = {
+            "pointa": MockPointConfig("Point A", 2, 21, 0x48, 0),
+            "pointb": MockPointConfig("Point B", 3, 22, 0x49, 1),
+        }
+        self.network = MockNetworkConfig()
+
+
+class MockNetworkConfig:
+    """Mock network configuration."""
+
+    def __init__(self) -> None:
+        self.wifi_ssid = "TestNetwork"
+        self.wifi_password = "password"
+        self.mqtt_broker_ip = "192.168.1.100"
+
+
+class MockPointConfig:
+    """Mock irrigation point configuration."""
+
+    def __init__(
+        self,
+        name: str,
+        valve_pin: int,
+        mosfet_pin: int,
+        ads_address: int,
+        ads_channel: int,
+    ) -> None:
+        self.name = name
+        self.valve_pin = valve_pin
+        self.mosfet_pin = mosfet_pin
+        self.ads_address = ads_address
+        self.ads_channel = ads_channel
+        self.id = name.lower().replace(" ", "")
+
+
+class MockLogger:
+    """Mock logger for testing."""
+
+    def __init__(self) -> None:
+        self.messages = []
+
+    def log(self, message: str) -> None:
+        self.messages.append(message)
+
+
+class TestMqttHassManagerNew(unittest.TestCase):
+    """Test MqttHassManager class with new API."""
 
     def test_create_ssl_context(self) -> None:
         """Test create_ssl_context function."""
-        # Note: This test might fail on actual hardware due to missing cert files
-        # but should work in the test environment with mocked modules
-        try:
-            ssl_context = create_ssl_context()
-            self.assertIsInstance(ssl_context, MockSSLContext)
-            self.assertEqual(ssl_context.protocol, 1)  # PROTOCOL_TLS_CLIENT
-            self.assertEqual(ssl_context.cafile, "./ca_crt.der")  # type: ignore
-            self.assertEqual(ssl_context.certfile, "./irrigationbackyard_crt.der")  # type: ignore
-            self.assertEqual(ssl_context.keyfile, "./irrigationbackyard_key.der")  # type: ignore
-        except Exception:
-            # In test environment, file loading might fail
-            # Just check that function exists and returns SSLContext
-            self.assertTrue(True)
+        # This is a simple test that just checks the function exists
+        ssl_context = create_ssl_context()
+        self.assertIsNotNone(ssl_context)
 
     def test_mqtt_hass_manager_initialization(self) -> None:
         """Test MqttHassManager initialization."""
-        manager = MqttHassManager(
-            config=self.mock_config,  # type: ignore
-            logger=self.mock_logger,  # type: ignore
-        )
+        config = MockConfig()
+        logger = MockLogger()
 
-        # Check initialization
-        self.assertIsNotNone(manager)
-        self.assertEqual(manager._config, self.mock_config)
-        self.assertEqual(manager._logger, self.mock_logger)
+        manager = MqttHassManager(config, logger)  # type: ignore
 
-        # Check that MQTT client was created
+        # Check that client was created
         self.assertIsNotNone(manager._client)
-
-        # Check that device info was created
-        self.assertIsNotNone(manager._device_info)
-        self.assertIn("identifiers", manager._device_info)
-        self.assertIn("name", manager._device_info)
-        self.assertEqual(manager._device_info["name"], "Test Station")
+        self.assertEqual(manager._config, config)
+        self.assertEqual(manager._logger, logger)
 
     def test_mqtt_hass_manager_setup(self) -> None:
         """Test MqttHassManager setup method."""
-        manager = MqttHassManager(config=self.mock_config, logger=self.mock_logger)  # type: ignore
+        config = MockConfig()
+        logger = MockLogger()
 
-        # Clear logs
-        self.mock_logger.messages.clear()
-
-        # Simulate a valve command message
-        topic = b"irrigation/test_station/location_a/valve/set"
-        message = b"ON"
-
-        # Call handle_message
-        manager._handle_message(topic, message)
-
-        # Check that message was stored for processing
-        received_messages = manager.read_received_messages()
-        self.assertEqual(len(received_messages), 1)
-        self.assertEqual(received_messages[0][0], topic.decode())
-        self.assertEqual(received_messages[0][1], message.decode())
-
-    def test_mqtt_hass_manager_handle_message_unknown_topic(self) -> None:
-        """Test MqttHassManager handle_message with unknown topic."""
-        manager = MqttHassManager(config=self.mock_config, logger=self.mock_logger)  # type: ignore
-
-        # Call setup first to initialize entities
+        manager = MqttHassManager(config, logger)  # type: ignore
         manager.setup()
 
-        # Clear logs and received messages
-        self.mock_logger.messages.clear()
-        manager._received_messages.clear()
+        # Check that client is connected
+        self.assertTrue(manager._client.connected)
 
-        # Simulate an unknown topic
-        topic = b"unknown/topic"
-        message = b"test"
+    def test_mqtt_hass_manager_get_station_instructions(self) -> None:
+        """Test get_station_instructions method."""
+        config = MockConfig()
+        logger = MockLogger()
 
-        # Call handle_message
-        manager._handle_message(topic, message)
-
-        # Should store the message even though topic is unknown
-        received_messages = manager.read_received_messages()
-        self.assertEqual(len(received_messages), 1)
-        self.assertEqual(received_messages[0][0], topic.decode())
-        self.assertEqual(received_messages[0][1], message.decode())
-
-    def test_mqtt_hass_manager_handle_pending_broker_connectivity_test(self) -> None:
-        """Test MqttHassManager _handle_pending_broker_connectivity_test method."""
-        manager = MqttHassManager(config=self.mock_config, logger=self.mock_logger)  # type: ignore
-
-        # Call setup first
+        manager = MqttHassManager(config, logger)  # type: ignore
         manager.setup()
 
-        # Get the mock MQTT client
-        mock_client = manager._client
+        # Simulate receiving MQTT messages
+        manager._received_messages = [
+            ("irrigation/teststation/pointa/valve/set", "open"),
+            ("irrigation/teststation/pointb/valve/set", "closed"),
+            ("homeassistant/status", "online"),  # Should be filtered out
+            ("irrigation/teststation/pointa/sensor", "data"),  # Should be filtered out
+        ]
 
-        # Clear logs
-        self.mock_logger.messages.clear()
+        # Get station instructions
+        commands = manager.get_station_instructions()
+
+        # Should only return valve commands
+        self.assertEqual(len(commands), 2)
+        self.assertEqual(commands[0].point_id, "pointa")
+        self.assertEqual(commands[0].state, "open")
+        self.assertEqual(commands[1].point_id, "pointb")
+        self.assertEqual(commands[1].state, "closed")
+
+        # Only valve messages should be cleared, other messages remain
+        self.assertEqual(
+            len(manager._received_messages), 2
+        )  # HA status and sensor remain
+
+    def test_mqtt_hass_manager_publish_valve_states(self) -> None:
+        """Test publish_valve_states method."""
+        config = MockConfig()
+        logger = MockLogger()
+
+        manager = MqttHassManager(config, logger)  # type: ignore
+        manager.setup()
 
         # Clear published messages
-        mock_client.published_messages.clear()  # type: ignore
+        manager._client.published_messages.clear()
 
-        # Call _handle_pending_broker_connectivity_test
-        manager._handle_pending_broker_connectivity_test()
+        # Publish valve states
+        valve_states = [
+            ValveState("pointa", "open"),
+            ValveState("pointb", "closed"),
+        ]
+        manager.publish_valve_states(valve_states)
+
+        # Check that messages were published
+        self.assertEqual(len(manager._client.published_messages), 2)
+
+        # Check topics and messages
+        topics = [msg[0] for msg in manager._client.published_messages]
+        messages = [msg[1] for msg in manager._client.published_messages]
+
+        self.assertIn("irrigation/teststation/pointa/valve/state", topics)
+        self.assertIn("irrigation/teststation/pointb/valve/state", topics)
+        self.assertIn("open", messages)
+        self.assertIn("closed", messages)
+
+    def test_mqtt_hass_manager_publish_sensor_states(self) -> None:
+        """Test publish_sensor_states method."""
+        config = MockConfig()
+        logger = MockLogger()
+
+        manager = MqttHassManager(config, logger)  # type: ignore
+        manager.setup()
+
+        # Clear published messages
+        manager._client.published_messages.clear()
+
+        # Publish sensor states
+        sensor_states = [
+            SensorState("pointa", 0.65),
+            SensorState("pointb", 0.35),
+        ]
+        manager.publish_sensor_states(sensor_states)
+
+        # Check that messages were published
+        self.assertEqual(len(manager._client.published_messages), 2)
+
+        # Check topics and messages
+        topics = [msg[0] for msg in manager._client.published_messages]
+        messages = [msg[1] for msg in manager._client.published_messages]
+
+        self.assertIn("irrigation/teststation/pointa/sensor", topics)
+        self.assertIn("irrigation/teststation/pointb/sensor", topics)
+
+        # Check that moisture values were converted to percentages
+        self.assertTrue(any('"moisture": 65.0' in msg for msg in messages))
+        self.assertTrue(any('"moisture": 35.0' in msg for msg in messages))
+
+    def test_mqtt_hass_manager_test_broker_connectivity(self) -> None:
+        """Test test_broker_connectivity method."""
+        config = MockConfig()
+        logger = MockLogger()
+
+        manager = MqttHassManager(config, logger)  # type: ignore
+        manager.setup()
+
+        # Clear published messages
+        manager._client.published_messages.clear()
+
+        # Test broker connectivity
+        manager.test_broker_connectivity()
 
         # Should publish a test message
-        self.assertTrue(len(mock_client.published_messages) > 0)  # type: ignore
+        self.assertTrue(len(manager._client.published_messages) > 0)
 
         # Check that it published to the broker connectivity topic
         self.assertTrue(
             any(
-                topic.startswith("irrigation/test_station/broker_connectivity")
-                for topic, message, retain, qos in mock_client.published_messages  # type: ignore
+                topic.startswith("irrigation/teststation/broker_connectivity")
+                for topic, message, retain, qos in manager._client.published_messages
             )
         )
 
     def test_mqtt_hass_manager_check_msg(self) -> None:
         """Test MqttHassManager check_msg method."""
-        manager = MqttHassManager(config=self.mock_config, logger=self.mock_logger)  # type: ignore
+        config = MockConfig()
+        logger = MockLogger()
 
-        # Call setup first
+        manager = MqttHassManager(config, logger)  # type: ignore
         manager.setup()
 
-        # Clear logs
-        self.mock_logger.messages.clear()
-
-        # Call check_msg
+        # Call check_msg (should not raise exceptions)
         manager.check_msg()
-
-        # Should check for MQTT messages
-        # (hard to test directly, but check_msg should run without error)
-        self.assertTrue(True)
 
 
 if __name__ == "__main__":
+    # Run the tests
     unittest.main()

@@ -3,6 +3,7 @@ from time import sleep
 from mqtt_hass_manager import MqttHassManager
 from irrigation_station import IrrigationStation
 from logger import Logger
+from task_scheduler import TaskScheduler
 from watchdog import Watchdog
 from config import Config
 from time_keeper import TimeKeeper
@@ -25,6 +26,10 @@ def main() -> None:
     watchdog = Watchdog(120, logger)
     time_keeper = TimeKeeper(logger)
     config = Config("./config.json")
+    scheduler = TaskScheduler(
+        sensor_measurement_interval=config.measurement_interval,
+        mqtt_publish_interval=config.publish_interval,
+    )
     mqtt_manager = MqttHassManager(config, logger)
     station = IrrigationStation(config, logger)
     wifi_manager = WiFiManager(config.network, logger)
@@ -39,46 +44,53 @@ def main() -> None:
     # LED for visual feedback
     onboard_led = Pin("LED", Pin.OUT)
 
-    loop_count = 0
-
     try:
         while True:
-            # 1. Watchdog, wifi_manager, and time_keeper do their thing
+            # === MAINTENANCE TASKS (Infrastructure) ===
+            # These keep the system running but aren't core irrigation logic
+
             watchdog.feed()
-            wifi_manager.handle_pending_connection_check()
-            time_keeper.handle_pending_ntp_sync()
+            scheduler.update()
 
-            # 2. Call mqtt_manager.process_messages
-            mqtt_manager.process_messages()
+            if scheduler.wifi_check.is_due():
+                wifi_manager.check_connection()
+                scheduler.wifi_check.complete()
 
-            # 3. Call mqtt_manager.get_station_instructions
-            mqtt_instructions = mqtt_manager.get_station_instructions()
+            if scheduler.ntp_sync.is_due():
+                if time_keeper.sync_time():
+                    scheduler.ntp_sync.complete()
 
-            # 4. Call station.provide_instructions(mqtt_instructions)
-            station.provide_instructions(mqtt_instructions)
-
-            # 5. Call station.execute_pending_tasks()
-            station.execute_pending_tasks()
-
-            # 6. Call station.get_status_updates() and store in variable
-            status_updates = station.get_status_updates()
-
-            # 7. Finally call mqtt_manager.send_status_updates(status_updates)
-            mqtt_manager.send_status_updates(status_updates)
-
-            loop_count += 1
-
-            # Run garbage collection every 30 loops (30 seconds) to prevent memory buildup
-            if loop_count % 30 == 0:
+            if scheduler.garbage_collect.is_due():
                 gc.collect()
+                scheduler.garbage_collect.complete()
 
-            # LED on every third second (loop_count % 3 == 0), off otherwise
-            if loop_count % 3 == 0:
-                onboard_led.on()
-            else:
-                onboard_led.off()
+            if scheduler.led_update.is_due():
+                onboard_led.value(0 if onboard_led.value() else 1)
+                scheduler.led_update.complete()
+
+            if scheduler.broker_test.is_due():
+                mqtt_manager.test_broker_connectivity()
+                scheduler.broker_test.complete()
+
+            mqtt_manager.process_messages()
+            valve_commands = mqtt_manager.get_station_instructions()
+
+            if valve_commands:
+                station.process_instructions(valve_commands)
+                valve_states = station.get_valve_states()
+                mqtt_manager.publish_valve_states(valve_states)
+
+            if scheduler.sensor_measurement.is_due():
+                station.take_measurements()
+                scheduler.sensor_measurement.complete()
+
+            if scheduler.mqtt_publish.is_due():
+                sensor_states = station.get_sensor_states()
+                mqtt_manager.publish_sensor_states(sensor_states)
+                scheduler.mqtt_publish.complete()
 
             sleep(1)
+
     except Exception as e:
         logger.log(f"Exception in main loop: {e}")
         reset()

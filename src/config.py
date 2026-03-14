@@ -54,10 +54,10 @@ def _parse_ads_address(conf: dict) -> int:
     return address
 
 
-def _get_publish_interval_ms(conf: dict) -> int:
+def _get_publish_interval(conf: dict) -> int:
     """Extract and convert publish_interval_minutes to milliseconds."""
     publish_interval_minutes: int = _get_if_valid("publish_interval_minutes", conf, int)
-    return publish_interval_minutes * 60 * 1000
+    return publish_interval_minutes * 60
 
 
 def _parse_ads_channel(conf: dict) -> int:
@@ -106,10 +106,30 @@ class Config:
 
         # Global smoothing parameters
         self.rolling_window: int = _get_if_valid("rolling_window", conf, int)
-        self.ema_alpha: float = _get_if_valid("ema_alpha", conf, float)
+        if self.rolling_window <= 0:
+            raise ValueError(f"rolling_window must be > 0, got {self.rolling_window}")
 
-        # Publish interval in minutes, converted to ms
-        self.publish_interval_ms: int = _get_publish_interval_ms(conf)
+        self.ema_alpha: float = _get_if_valid("ema_alpha", conf, float)
+        if not 0.0 <= self.ema_alpha <= 1.0:
+            raise ValueError(
+                f"ema_alpha must be between 0.0 and 1.0, got {self.ema_alpha}"
+            )
+
+        # Publish interval in minutes, converted to seconds
+        self.publish_interval: int = _get_publish_interval(conf)
+        if self.publish_interval <= 0:
+            raise ValueError(
+                f"publish_interval must be > 0, got {self.publish_interval}"
+            )
+
+        # Measurement interval in seconds (publish_interval // rolling_window)
+        self.measurement_interval: int = self.publish_interval // self.rolling_window
+        if self.measurement_interval <= 0:
+            raise ValueError(
+                f"measurement_interval would be {self.measurement_interval} "
+                f"(publish_interval={self.publish_interval} // rolling_window={self.rolling_window}). "
+                "Increase publish_interval or decrease rolling_window."
+            )
 
         for irrigation_point_conf in irrigation_points_conf:
             irrigation_point = IrrigationPointConfig(irrigation_point_conf)
@@ -129,7 +149,8 @@ class Config:
             f"  mqtt_broker_ip: {self.network.mqtt_broker_ip}",
             f"rolling_window:   {self.rolling_window}",
             f"ema_alpha:        {self.ema_alpha}",
-            f"publish_interval: {self.publish_interval_ms // 60000} min ({self.publish_interval_ms} ms)",
+            f"publish_interval: {self.publish_interval} seconds",
+            f"measurement_interval: {self.measurement_interval} seconds",
             "irrigation_points:",
         ]
         for ip in self.irrigation_points.values():

@@ -70,37 +70,33 @@ class TestTask(unittest.TestCase):
         task = Task(interval_seconds=10.0)
         self.assertEqual(task.interval_seconds, 10.0)
         self.assertEqual(
-            task.last_completion_time, 1000.0
-        )  # Initialized to current time
-        self.assertFalse(task.is_due())
+            task.last_completion_time, 0.0
+        )  # Initialized to 0.0, will be set on first complete()
+        self.assertTrue(task.is_due())  # Tasks are due immediately on startup
 
     def test_task_update_status_not_due(self) -> None:
         """Test update_status when not enough time has passed."""
         task = Task(interval_seconds=10.0)
-        # Task was just created at time 1000.0
+        # Complete the task first to set last_completion_time
+        task.complete()  # Sets last_completion_time to current time (1000.0)
+        # Now 5 seconds have passed
         MockTime.set_time(1005.0)  # 5 seconds elapsed
         task.update_status(current_time=1005.0)
-        self.assertFalse(task.is_due())  # Needs 10 seconds
+        self.assertFalse(task.is_due())  # Needs 10 seconds total
 
     def test_task_update_status_due(self) -> None:
         """Test update_status when enough time has passed."""
         task = Task(interval_seconds=10.0)
-        # Task was just created at time 1000.0
-        MockTime.set_time(1011.0)  # 11 seconds elapsed
-        task.update_status(current_time=1011.0)
-        self.assertTrue(task.is_due())  # 11 > 10 seconds
-
-    def test_task_complete(self) -> None:
-        """Test marking task as complete."""
-        task = Task(interval_seconds=10.0)
-        # Task was created at time 1000.0
-        MockTime.set_time(1011.0)
-        task.update_status(current_time=1011.0)
+        # Complete the task first to set last_completion_time
+        task.complete()  # Sets last_completion_time to current time (1000.0)
+        # Now 10 seconds have passed
+        MockTime.set_time(1010.0)  # 10 seconds elapsed
+        task.update_status(current_time=1010.0)
         self.assertTrue(task.is_due())
 
-        # Mark complete at current time (1011.0)
+        # Mark complete at current time (1010.0)
         task.complete()
-        self.assertEqual(task.last_completion_time, 1011.0)
+        self.assertEqual(task.last_completion_time, 1010.0)
         self.assertFalse(task.is_due())
 
         # Advance time 5 seconds - should not be due
@@ -149,15 +145,23 @@ class TestTaskScheduler(unittest.TestCase):
 
     def test_scheduler_update(self) -> None:
         """Test updating all tasks in scheduler."""
-        # Initially no tasks should be due (just initialized)
+        # Initially all tasks should be due (just initialized)
         self.scheduler.update()
+        self.assertTrue(self.scheduler.wifi_check.is_due())
+        self.assertTrue(self.scheduler.led_update.is_due())
+
+        # Complete all tasks at initial time
+        self.scheduler.wifi_check.complete()
+        self.scheduler.led_update.complete()
         self.assertFalse(self.scheduler.wifi_check.is_due())
         self.assertFalse(self.scheduler.led_update.is_due())
 
         # Advance time 5 seconds - LED update should be due (interval 3s)
         MockTime.advance(5.0)
         self.scheduler.update()
-        self.assertFalse(self.scheduler.wifi_check.is_due())  # Needs 600s
+        self.assertFalse(
+            self.scheduler.wifi_check.is_due()
+        )  # Needs 600s, only 5s elapsed
         self.assertTrue(self.scheduler.led_update.is_due())  # Needs 3s, 5s elapsed
 
         # Complete LED update
@@ -195,6 +199,15 @@ class TestTaskScheduler(unittest.TestCase):
 
     def test_different_task_intervals(self) -> None:
         """Test that tasks with different intervals work correctly."""
+        # Complete all tasks at time 1000.0 (when scheduler was created)
+        self.scheduler.wifi_check.complete()
+        self.scheduler.ntp_sync.complete()
+        self.scheduler.sensor_measurement.complete()
+        self.scheduler.mqtt_publish.complete()
+        self.scheduler.broker_test.complete()
+        self.scheduler.garbage_collect.complete()
+        self.scheduler.led_update.complete()
+
         # Advance time 35 seconds
         MockTime.set_time(1035.0)
         self.scheduler.update()
