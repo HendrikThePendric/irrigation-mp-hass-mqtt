@@ -152,28 +152,24 @@ class TestMqttHassManagerNew(unittest.TestCase):
         manager = MqttHassManager(config, logger)  # type: ignore
         manager.setup()
 
-        # Simulate receiving MQTT messages
-        manager._received_messages = [
-            ("irrigation/teststation/pointa/valve/set", "open"),
-            ("irrigation/teststation/pointb/valve/set", "closed"),
-            ("homeassistant/status", "online"),  # Should be filtered out
-            ("irrigation/teststation/pointa/sensor", "data"),  # Should be filtered out
+        # Simulate receiving valve commands (now stored as ValveState objects)
+        manager._pending_valve_commands = [
+            ValveState("pointa", "open"),
+            ValveState("pointb", "closed"),
         ]
 
         # Get station instructions
         commands = manager.get_station_instructions()
 
-        # Should only return valve commands
+        # Should return all pending valve commands
         self.assertEqual(len(commands), 2)
         self.assertEqual(commands[0].point_id, "pointa")
         self.assertEqual(commands[0].state, "open")
         self.assertEqual(commands[1].point_id, "pointb")
         self.assertEqual(commands[1].state, "closed")
 
-        # Only valve messages should be cleared, other messages remain
-        self.assertEqual(
-            len(manager._received_messages), 2
-        )  # HA status and sensor remain
+        # Pending commands should be cleared after getting them
+        self.assertEqual(len(manager._pending_valve_commands), 0)
 
     def test_mqtt_hass_manager_publish_valve_states(self) -> None:
         """Test publish_valve_states method."""
@@ -262,16 +258,16 @@ class TestMqttHassManagerNew(unittest.TestCase):
             )
         )
 
-    def test_mqtt_hass_manager_check_msg(self) -> None:
-        """Test MqttHassManager check_msg method."""
+    def test_mqtt_hass_manager_process_messages(self) -> None:
+        """Test MqttHassManager process_messages method."""
         config = MockConfig()
         logger = MockLogger()
 
         manager = MqttHassManager(config, logger)  # type: ignore
         manager.setup()
 
-        # Call check_msg (should not raise exceptions)
-        manager.check_msg()
+        # Call process_messages (should not raise exceptions)
+        manager.process_messages()
 
 
 if __name__ == "__main__":
