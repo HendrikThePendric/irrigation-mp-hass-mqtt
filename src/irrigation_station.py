@@ -50,7 +50,7 @@ class IrrigationStation:
 
         # Helpers for computing state updates
         valve_updates: list[ValveState] = []
-        last_command_opened_point_id: str | None = None
+        last_command_opened_point_id: str | None = current_open_point_id
         valve_states = {}
 
         for command in instructions:
