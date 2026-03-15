@@ -41,23 +41,22 @@ class IrrigationStation:
         if not instructions:
             return []
 
-        # Final updates list
-        valve_updates: list[ValveState] = []
-        # Track resolved action
-        resolved_command_point_id: str | None = None
-        resolved_command_state: str | None = None
-        currently_open_point_is_among_commands = False
-
         # Identify which valve is currently open
-        currently_open_point_id: str | None = None
+        current_open_point_id: str | None = None
         for pid, point in self._points.items():
             if point.get_valve_state() == IrrigationPoint.STATE_OPEN:
-                currently_open_point_id = pid
+                current_open_point_id = pid
                 break
+
+        # Helpers for computing state updates
+        valve_updates: list[ValveState] = []
+        last_command_opened_point_id: str | None = None
+        valve_states = {}
 
         for command in instructions:
             if command.point_id not in self._points:
                 self._logger.log(f"Unknown irrigation point: {command.point_id}")
+                continue
 
             if (
                 command.state != IrrigationPoint.STATE_OPEN
@@ -66,58 +65,45 @@ class IrrigationStation:
                 self._logger.log(
                     f"Unknown valve command: {command.state} for {command.point_id}"
                 )
+                continue
 
-            # New commands on the same point clear earlier ones
-            if command.point_id == resolved_command_point_id:
-                resolved_command_point_id = None
-                resolved_command_state = None
+            # Opening a new valve
+            if (
+                command.state == IrrigationPoint.STATE_OPEN
+                and command.point_id != last_command_opened_point_id
+            ):
+                # Close other if present
+                if last_command_opened_point_id:
+                    valve_states[last_command_opened_point_id] = (
+                        IrrigationPoint.STATE_CLOSED
+                    )
+                # Update last_command_opened_point_id
+                last_command_opened_point_id = command.point_id
 
-            # A command is actionable if the command state differs from current state
-            if command.state != self._points[command.point_id].get_valve_state():
-                resolved_command_point_id = command.point_id
-                resolved_command_state = command.state
+            # Unset open_point_id when all valves are closed
+            if (
+                command.state == IrrigationPoint.STATE_CLOSED
+                and command.point_id == last_command_opened_point_id
+            ):
+                last_command_opened_point_id = None
 
-            if command.point_id == currently_open_point_id:
-                currently_open_point_is_among_commands = True
-
-        if (
-            resolved_command_state == IrrigationPoint.STATE_CLOSED
-            and resolved_command_point_id != currently_open_point_id
-        ):
-            raise Exception(
-                "Logic error: the only valve to close is the currently open one"
-            )
-
-        # If there is a valid command state there is something to do, which can be:
-        # Opening a new valve, which means the current needs to be closed
-        # Closing a valve and effectively this can only be the currently open valve
-        if resolved_command_state and currently_open_point_id:
-            self._points[currently_open_point_id].close_valve()
-
-        # Open valve if needed
-        if (
-            resolved_command_state == IrrigationPoint.STATE_OPEN
-            and resolved_command_point_id
-        ):
-            self._points[resolved_command_point_id].open_valve()
-
-        for command in instructions:
-            valve_state = (
-                IrrigationPoint.STATE_OPEN
-                if resolved_command_point_id == command.point_id
-                and resolved_command_state == IrrigationPoint.STATE_OPEN
-                else IrrigationPoint.STATE_CLOSED
-            )
-            valve_updates.append(ValveState(command.point_id, valve_state))
+            valve_states[command.point_id] = command.state
 
         if (
-            resolved_command_state
-            and currently_open_point_id
-            and not currently_open_point_is_among_commands
+            current_open_point_id
+            and current_open_point_id != last_command_opened_point_id
         ):
-            valve_updates.append(
-                ValveState(currently_open_point_id, IrrigationPoint.STATE_CLOSED)
-            )
+            self._points[current_open_point_id].close_valve()
+            valve_states[current_open_point_id] = IrrigationPoint.STATE_CLOSED
+
+        if (
+            last_command_opened_point_id
+            and current_open_point_id != last_command_opened_point_id
+        ):
+            self._points[last_command_opened_point_id].open_valve()
+
+        for pid, state in valve_states.items():
+            valve_updates.append(ValveState(pid, state))
 
         return valve_updates
 
