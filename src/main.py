@@ -46,9 +46,6 @@ def main() -> None:
 
     try:
         while True:
-            # === MAINTENANCE TASKS (Infrastructure) ===
-            # These keep the system running but aren't core irrigation logic
-
             watchdog.feed()
             scheduler.update()
 
@@ -76,9 +73,8 @@ def main() -> None:
             valve_commands = mqtt_manager.get_station_instructions()
 
             if valve_commands:
-                station.process_instructions(valve_commands)
-                valve_states = station.get_valve_states()
-                mqtt_manager.publish_valve_states(valve_states)
+                valve_updates = station.process_instructions(valve_commands)
+                mqtt_manager.publish_valve_states(valve_updates)
 
             if scheduler.sensor_measurement.is_due():
                 station.take_measurements()
