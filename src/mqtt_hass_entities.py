@@ -71,11 +71,20 @@ class MqttHassSensor(MqttHassEntity):
         }
         self._client.publish(discovery_topic, dumps(payload), retain=True)
         self._log_discovery_message(discovery_topic, payload)
-        # Note: Sensor state publishing is now handled in IrrigationStation
 
-    def publish_moisture_level(self) -> None:
-        # Note: This method is no longer used since sensor publishing is handled in IrrigationStation
-        pass
+    def publish_moisture_level(self, moisture: float) -> None:
+        """Publish current moisture level."""
+        try:
+            moisture_percent = round(moisture * 100, 1)
+            payload = '{"moisture": ' + str(moisture_percent) + "}"
+            self._client.publish(self._state_topic, payload, retain=True)
+            self._logger.log(
+                f"Published sensor: {self._point_id} = {moisture_percent}%"
+            )
+        except Exception as e:
+            self._logger.log(
+                f"Failed to publish sensor state for {self._point_id}: {e}"
+            )
 
 
 class MqttHassValve(MqttHassEntity):
@@ -109,16 +118,15 @@ class MqttHassValve(MqttHassEntity):
         }
         self._client.publish(discovery_topic, dumps(payload), retain=True)
         self._log_discovery_message(discovery_topic, payload)
-        # Note: Valve state publishing is now handled in IrrigationStation
 
-    def publish_valve_state(self) -> None:
-        # Note: This method is no longer used since valve publishing is handled in IrrigationStation
-        pass
+    def publish_valve_state(self, state: str) -> None:
+        """Publish current valve state."""
+        try:
+            self._client.publish(self._state_topic, state, retain=True)
+            self._logger.log(f"Published valve: {self._point_id} = {state}")
+        except Exception as e:
+            self._logger.log(f"Failed to publish valve state for {self._point_id}: {e}")
 
     def subscribe_to_command_topic(self) -> None:
         self._client.subscribe(self._command_topic)
         self._logger.log(f"Subscribed::{self._command_topic}")
-
-    def handle_command_message(self, msg: str) -> None:
-        # Note: This method is no longer used since command handling is moved to IrrigationStation
-        pass

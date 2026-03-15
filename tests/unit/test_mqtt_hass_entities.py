@@ -160,15 +160,15 @@ class TestMqttHassEntities(unittest.TestCase):
     def test_mqtt_hass_sensor_publish_moisture_level(self) -> None:
         """Test MqttHassSensor publish_moisture_level method."""
         sensor = MqttHassSensor(self.params)
+        self.mock_client.published_messages.clear()
 
-        # The publish_moisture_level method is empty (just pass)
-        # This is because sensor publishing is handled in IrrigationStation
-        # So we just test that the method exists and doesn't crash
-        sensor.publish_moisture_level()
+        sensor.publish_moisture_level(0.65)
 
-        # No messages should be published since the method is empty
-        # (Discovery message was already published in __init__)
-        self.assertTrue(True)  # Just checking it runs without error
+        self.assertEqual(len(self.mock_client.published_messages), 1)
+        topic, message, retain, qos = self.mock_client.published_messages[0]
+        self.assertEqual(topic, "irrigation/test_station/point_1/sensor")
+        self.assertIn('"moisture": 65.0', message)
+        self.assertTrue(retain)
 
     def test_mqtt_hass_valve_creation(self) -> None:
         """Test MqttHassValve creation and discovery message."""
@@ -210,15 +210,15 @@ class TestMqttHassEntities(unittest.TestCase):
     def test_mqtt_hass_valve_publish_valve_state(self) -> None:
         """Test MqttHassValve publish_valve_state method."""
         valve = MqttHassValve(self.params)
+        self.mock_client.published_messages.clear()
 
-        # The publish_valve_state method is empty (just pass)
-        # This is because valve publishing is handled in IrrigationStation
-        # So we just test that the method exists and doesn't crash
-        valve.publish_valve_state()
+        valve.publish_valve_state("open")
 
-        # No messages should be published since the method is empty
-        # (Discovery message was already published in __init__)
-        self.assertTrue(True)  # Just checking it runs without error
+        self.assertEqual(len(self.mock_client.published_messages), 1)
+        topic, message, retain, qos = self.mock_client.published_messages[0]
+        self.assertEqual(topic, "irrigation/test_station/point_1/valve/state")
+        self.assertEqual(message, "open")
+        self.assertTrue(retain)
 
     def test_messager_params_creation(self) -> None:
         """Test MessagerParams namedtuple creation."""
