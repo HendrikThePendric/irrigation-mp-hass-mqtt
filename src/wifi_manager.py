@@ -5,7 +5,6 @@ from config import NetworkConfig
 from logger import Logger
 
 RETRY_DELAY = 2  # seconds
-CHECK_INTERVAL_MS = 600_000  # milliseconds (10 minutes)
 
 
 class WiFiManager:
@@ -24,7 +23,10 @@ class WiFiManager:
 
     def check_connection(self) -> None:
         """Check WiFi connection and reconnect if needed."""
-        self._check_connection()
+        if not self._wlan.isconnected():
+            self._connected = False
+            self._logger.log("WiFi connection lost, attempting to reconnect...")
+            self._connect()
 
     def _connect(self) -> None:
         """Attempt to connect to the WiFi network."""
@@ -61,10 +63,3 @@ class WiFiManager:
             ]
         )
         self._logger.log(message)
-
-    def _check_connection(self) -> None:
-        """Check the WiFi connection and reconnect if needed."""
-        if not self._wlan.isconnected():
-            self._connected = False
-            self._logger.log("WiFi connection lost, attempting to reconnect...")
-            self._connect()
