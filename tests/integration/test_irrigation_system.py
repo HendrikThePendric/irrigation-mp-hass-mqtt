@@ -1,10 +1,13 @@
-"""E2E-style integration tests for main irrigation system.
+"""E2E-style integration tests for irrigation system.
 
-Tests the three key scenarios:
+Tests key scenarios:
 1. When a valve-open MQTT message is received → valve opens → status update sent
 2. When a valve-open MQTT message is received while another valve is open →
    first valve closes → new valve opens → two MQTT updates sent
 3. When publish interval elapses → MQTT sensor messages for all sensors are sent
+4. When multiple rapid valve commands arrive → last command wins → appropriate valves closed
+5. When WiFi drops and reconnects → system reconnects to MQTT → resumes operation
+6. When sensor read fails → uses last valid reading → system continues
 """
 
 # pyright: basic
@@ -91,8 +94,8 @@ sys.modules["datetime"] = real_datetime
 import unittest
 
 
-class TestMainE2E(unittest.TestCase):
-    """E2E integration tests for main irrigation system."""
+class TestIrrigationSystemE2E(unittest.TestCase):
+    """E2E integration tests for irrigation system."""
 
     def setUp(self) -> None:
         """Set up test environment."""
@@ -124,7 +127,7 @@ class TestMainE2E(unittest.TestCase):
 
         builtins.open = default_open
 
-        # Create a test configuration with two irrigation points
+        # Create a test configuration with three irrigation points
         self.test_config = {
             "station_name": "Test Station",
             "network": {
@@ -149,6 +152,13 @@ class TestMainE2E(unittest.TestCase):
                     "mosfet_pin": 22,
                     "ads_address": "0x49",
                     "ads_channel": 1,
+                },
+                {
+                    "name": "Location C",
+                    "valve_pin": 4,
+                    "mosfet_pin": 26,
+                    "ads_address": "0x4A",
+                    "ads_channel": 2,
                 },
             ],
         }
@@ -263,39 +273,31 @@ class TestMainE2E(unittest.TestCase):
         self.original_load_json = config_module._load_json_file
         config_module._load_json_file = lambda file_path: self.test_config
 
-        # Now import main module components
-        from irrigation_station import IrrigationStation
-        from mqtt_hass_manager import MqttHassManager
-        from config import Config
-        from logger import Logger
-        from task_scheduler import TaskScheduler
-        from time_keeper import TimeKeeper
-        from wifi_manager import WiFiManager
-        from watchdog import Watchdog
+        # Now import and create the irrigation system
+        from irrigation_system import IrrigationSystem
 
-        # Create real instances using mocked dependencies
-        self.logger = Logger(should_print=True)
-        self.config = Config("./config.json")
-        self.station = IrrigationStation(self.config, self.logger)
-        self.mqtt_manager = MqttHassManager(self.config, self.logger)
-        self.scheduler = TaskScheduler(
-            sensor_measurement_interval=self.config.measurement_interval,
-            mqtt_publish_interval=self.config.publish_interval,
-        )
-        self.time_keeper = TimeKeeper(self.logger)
-        self.wifi_manager = WiFiManager(self.config.network, self.logger)
-        self.watchdog = Watchdog(120, self.logger)
+        # Create the irrigation system (uses mocked dependencies via sys.modules)
+        self.system = IrrigationSystem("./config.json", print_logs=True)
 
-        # Setup components
-        self.wifi_manager.setup()
-        self.time_keeper.initialize_ntp_synchronization()
-        self.logger.enable_timestamp_prefix(
-            self.time_keeper.get_current_cet_datetime_str
-        )
-        self.mqtt_manager.setup()
+        # Get references to components for easier access in tests
+        self.logger = self.system.logger
+        self.config = self.system.config
+        self.station = self.system.station
+        self.mqtt_manager = self.system.mqtt_manager
+        self.scheduler = self.system.scheduler
+        self.time_keeper = self.system.time_keeper
+        self.wifi_manager = self.system.wifi_manager
+        self.watchdog = self.system.watchdog
 
         # Get the mock MQTT client instance for test inspection
         self.mock_mqtt_client = MockMQTTClient.instances[0]
+
+        # Create mapping from point_id to pin_id for easier verification
+        self.point_to_pin_map = {
+            "locationa": 2,
+            "locationb": 3,
+            "locationc": 4,
+        }
 
     def tearDown(self) -> None:
         """Restore original functions."""
@@ -315,13 +317,6 @@ class TestMainE2E(unittest.TestCase):
         from irrigation_states import ValveState
 
         self.mqtt_manager._pending_valve_commands.append(ValveState(point_id, state))
-
-    def _process_valve_commands(self) -> None:
-        """Process pending valve commands through the normal flow."""
-        valve_commands = self.mqtt_manager.get_station_instructions()
-        if valve_commands:
-            valve_updates = self.station.process_instructions(valve_commands)
-            self.mqtt_manager.publish_valve_states(valve_updates)
 
     def _get_valve_pin_state(self, pin_id: int) -> int:
         """Get the current value of a valve pin."""
@@ -347,24 +342,52 @@ class TestMainE2E(unittest.TestCase):
             if f"{point_id}/sensor" in msg[0]
         ]
 
+    def _verify_valve_state(self, point_id: str, expected_state: str) -> None:
+        """Verify that a valve is in the expected state (open/closed)."""
+        pin_id = self.point_to_pin_map.get(point_id)
+        if pin_id is None:
+            self.fail(f"Unknown point_id: {point_id}")
+
+        actual_pin_value = self._get_valve_pin_state(pin_id)
+        # open = pin value 1, closed = pin value 0
+        expected_pin_value = 1 if expected_state == "open" else 0
+        self.assertEqual(
+            actual_pin_value,
+            expected_pin_value,
+            f"Valve {point_id} should be {expected_state} (pin {pin_id} value {expected_pin_value}), "
+            f"but got pin value {actual_pin_value}",
+        )
+
+    def _simulate_wifi_drop(self) -> None:
+        """Simulate WiFi disconnection."""
+        if mock_network.wlan_instance:
+            mock_network.wlan_instance._connected = False
+
+    def _simulate_wifi_recovery(self) -> None:
+        """Simulate WiFi reconnection."""
+        if mock_network.wlan_instance:
+            mock_network.wlan_instance._connected = True
+
     def test_valve_open_command_opens_valve_and_publishes_status(self) -> None:
         """Scenario 1: When a valve-open MQTT message is received,
         then the valve is opened and a status update is sent over MQTT."""
 
-        # Initially both valves should be closed (pin value 0)
-        self.assertEqual(self._get_valve_pin_state(2), 0)
-        self.assertEqual(self._get_valve_pin_state(3), 0)
+        # Initially all valves should be closed
+        self._verify_valve_state("locationa", "closed")
+        self._verify_valve_state("locationb", "closed")
+        self._verify_valve_state("locationc", "closed")
 
         # Simulate receiving a valve-open command for Location A
         self._simulate_valve_command("locationa", "open")
 
-        # Process the command
-        self._process_valve_commands()
+        # Process the command by running system tick
+        self.system.tick()
 
-        # Verify valve A is now open (pin value 1)
-        self.assertEqual(self._get_valve_pin_state(2), 1)
-        # Verify valve B remains closed
-        self.assertEqual(self._get_valve_pin_state(3), 0)
+        # Verify valve A is now open
+        self._verify_valve_state("locationa", "open")
+        # Verify valve B and C remain closed
+        self._verify_valve_state("locationb", "closed")
+        self._verify_valve_state("locationc", "closed")
 
         # Verify MQTT status update was published
         valve_messages = self._get_published_valve_messages("locationa")
@@ -381,7 +404,7 @@ class TestMainE2E(unittest.TestCase):
 
         # First open valve A
         self._simulate_valve_command("locationa", "open")
-        self._process_valve_commands()
+        self.system.tick()
 
         # Verify valve A is open, valve B closed
         self.assertEqual(self._get_valve_pin_state(2), 1)
@@ -392,7 +415,7 @@ class TestMainE2E(unittest.TestCase):
 
         # Now simulate opening valve B while A is still open
         self._simulate_valve_command("locationb", "open")
-        self._process_valve_commands()
+        self.system.tick()
 
         # Verify valve A is now closed, valve B is open
         self.assertEqual(
@@ -432,30 +455,22 @@ class TestMainE2E(unittest.TestCase):
         # Advance time by more than the publish interval (4 minutes = 240 seconds)
         mock_time.advance(250)
 
-        # Update scheduler to check due tasks
-        self.scheduler.update()
+        # Simulate the main loop running - this will update scheduler and execute due tasks
+        self.system.tick()
 
-        # Check if publish task is due
-        self.assertTrue(
-            self.scheduler.mqtt_publish.is_due(),
-            "Publish task should be due after interval",
-        )
-
-        # Execute the publish task as main loop would
-        if self.scheduler.mqtt_publish.is_due():
-            sensor_states = self.station.get_sensor_states()
-            self.mqtt_manager.publish_sensor_states(sensor_states)
-            self.scheduler.mqtt_publish.complete()
-
-        # Verify sensor messages were published for both points
+        # Verify sensor messages were published for all points
         sensor_messages_a = self._get_published_sensor_messages("locationa")
         sensor_messages_b = self._get_published_sensor_messages("locationb")
+        sensor_messages_c = self._get_published_sensor_messages("locationc")
 
         self.assertTrue(
             len(sensor_messages_a) > 0, "No sensor message published for Location A"
         )
         self.assertTrue(
             len(sensor_messages_b) > 0, "No sensor message published for Location B"
+        )
+        self.assertTrue(
+            len(sensor_messages_c) > 0, "No sensor message published for Location C"
         )
 
         # Verify messages contain moisture data (as JSON)
@@ -478,6 +493,195 @@ class TestMainE2E(unittest.TestCase):
                 self.fail(f"Sensor message payload invalid JSON: {payload} ({e})")
 
         print("✅ Test 3 passed: Sensor messages published after interval")
+
+    def test_multiple_rapid_valve_commands_last_command_wins(self) -> None:
+        """Scenario 4: When multiple rapid valve commands arrive (A, B, C),
+        then only the last command (C) takes effect, appropriate valves are closed,
+        and MQTT updates reflect final states."""
+
+        # Clear any previous messages
+        self.mock_mqtt_client.published_messages.clear()
+
+        # Initially all valves closed
+        self._verify_valve_state("locationa", "closed")
+        self._verify_valve_state("locationb", "closed")
+        self._verify_valve_state("locationc", "closed")
+
+        # Simulate rapid commands for A, B, C (all "open")
+        self._simulate_valve_command("locationa", "open")
+        self._simulate_valve_command("locationb", "open")
+        self._simulate_valve_command("locationc", "open")
+
+        # Process all commands together (as they would be retrieved in one batch)
+        self.system.tick()
+
+        # Verify only valve C is open, A and B are closed
+        self._verify_valve_state("locationa", "closed")
+        self._verify_valve_state("locationb", "closed")
+        self._verify_valve_state("locationc", "open")
+
+        # Verify MQTT updates for each point reflect final states
+        valve_messages_a = self._get_published_valve_messages("locationa")
+        valve_messages_b = self._get_published_valve_messages("locationb")
+        valve_messages_c = self._get_published_valve_messages("locationc")
+
+        # Each point should have at least one update
+        self.assertTrue(len(valve_messages_a) > 0, "No update for valve A")
+        self.assertTrue(len(valve_messages_b) > 0, "No update for valve B")
+        self.assertTrue(len(valve_messages_c) > 0, "No update for valve C")
+
+        # Verify the final state in the last message for each point
+        last_message_a = valve_messages_a[-1]
+        last_message_b = valve_messages_b[-1]
+        last_message_c = valve_messages_c[-1]
+
+        # A and B should be closed, C open
+        self.assertTrue("closed" in last_message_a[1], "Valve A should be closed")
+        self.assertTrue("closed" in last_message_b[1], "Valve B should be closed")
+        self.assertTrue("open" in last_message_c[1], "Valve C should be open")
+
+        print("✅ Test 4 passed: Multiple rapid commands handled correctly")
+
+    def test_wifi_reconnection_resumes_operation(self) -> None:
+        """Scenario 5: When WiFi drops and reconnects,
+        the system reconnects to MQTT and resumes operation."""
+
+        # Clear any previous messages
+        self.mock_mqtt_client.published_messages.clear()
+
+        # Run one system tick to complete initial due tasks
+        self.system.tick()
+
+        # Clear messages after initial tick
+        self.mock_mqtt_client.published_messages.clear()
+
+        # Simulate WiFi drop
+        self._simulate_wifi_drop()
+        # WiFi manager detects disconnection on next check
+        # (We call check_connection directly as scheduler would when task due)
+        self.wifi_manager.check_connection()
+        # At this point, WiFi manager should attempt reconnect but fail
+        # (since _connected is False). We'll simulate that by leaving it False.
+
+        # Simulate WiFi recovery
+        self._simulate_wifi_recovery()
+        # WiFi manager check again should succeed
+        self.wifi_manager.check_connection()
+
+        # Verify WiFi is connected
+        self.assertTrue(
+            mock_network.wlan_instance is not None, "WLAN instance should exist"
+        )
+        self.assertTrue(
+            mock_network.wlan_instance._connected,
+            "WiFi should be connected after recovery",
+        )
+
+        # Verify MQTT client is still connected
+        self.assertTrue(
+            self.mock_mqtt_client.connected,
+            "MQTT client should be connected after WiFi recovery",
+        )
+
+        # Advance time for sensor measurement (80 seconds) and publish (240 seconds) tasks
+        # We'll advance enough for both to be due
+        mock_time.advance(250)  # > 240 seconds
+
+        # Run system tick - should take measurements and publish sensor data
+        self.system.tick()
+
+        # Check that sensor messages were published (system resumed operation)
+        sensor_messages_a = self._get_published_sensor_messages("locationa")
+        self.assertTrue(
+            len(sensor_messages_a) > 0,
+            "Should be able to publish sensor data after WiFi reconnection",
+        )
+
+        print("✅ Test 5 passed: WiFi reconnection handled correctly")
+
+    def test_sensor_read_failure_uses_last_valid_reading(self) -> None:
+        """Scenario 6: When sensor read fails,
+        the system uses last valid reading and continues operation."""
+
+        # Clear previous messages
+        self.mock_mqtt_client.published_messages.clear()
+
+        # Run one system tick to complete initial due tasks (sensor measurement and publish)
+        self.system.tick()
+        # Clear messages after initial tick to isolate test
+        self.mock_mqtt_client.published_messages.clear()
+
+        # Get baseline sensor value for Location A from station sensor states
+        sensor_states = self.station.get_sensor_states()
+        baseline_state = next(
+            (s for s in sensor_states if s.point_id == "locationa"), None
+        )
+        self.assertIsNotNone(baseline_state, "Should have sensor state for locationa")
+        baseline_value = baseline_state.moisture
+        self.assertTrue(baseline_value > 0.0, "Baseline moisture should be positive")
+
+        # Get the ADS mock for Location A (address 0x48)
+        ads_mock = self.station._ads_modules[0x48]
+        original_read = ads_mock.read
+
+        # Simulate sensor failure by making read raise OSError
+        def failing_read(rate, channel):
+            raise OSError("Mock ADC failure")
+
+        ads_mock.read = failing_read
+
+        try:
+            # Advance time for sensor measurement interval (80 seconds)
+            mock_time.advance(85)  # slightly more than interval
+            # Run system tick - should attempt measurement, fail, and keep last value
+            self.system.tick()
+
+            # Verify sensor value is still the baseline (last known good)
+            sensor_states_after = self.station.get_sensor_states()
+            after_state = next(
+                (s for s in sensor_states_after if s.point_id == "locationa"), None
+            )
+            self.assertIsNotNone(after_state, "Should have sensor state after failure")
+            after_failure_value = after_state.moisture
+            self.assertEqual(
+                after_failure_value,
+                baseline_value,
+                "Sensor should use last known value after read failure",
+            )
+
+            # Advance time for publish interval (240 seconds)
+            mock_time.advance(250)  # enough for publish task to be due
+            # Run system tick - should publish sensor data using last known values
+            self.system.tick()
+
+            # Check that sensor messages were published
+            sensor_messages_a = self._get_published_sensor_messages("locationa")
+            self.assertTrue(
+                len(sensor_messages_a) > 0,
+                "Should be able to publish sensor data after sensor failure",
+            )
+
+            # Verify published moisture value matches last known value
+            import json
+
+            last_message = sensor_messages_a[-1]
+            payload = last_message[1]
+            data = json.loads(payload)
+            published_moisture = data.get("moisture")
+            self.assertIsNotNone(published_moisture, "Moisture field missing")
+            expected_moisture = baseline_value * 100.0
+            self.assertTrue(
+                abs(published_moisture - expected_moisture) < 0.01,
+                "Published moisture {} should match last known value {}".format(
+                    published_moisture, expected_moisture
+                ),
+            )
+
+        finally:
+            # Restore original read method
+            ads_mock.read = original_read
+
+        print("✅ Test 6 passed: Sensor read failure handled correctly")
 
 
 if __name__ == "__main__":
