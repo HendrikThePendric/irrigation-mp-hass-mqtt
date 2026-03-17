@@ -19,6 +19,7 @@ The system monitors soil moisture and controls irrigation valves based on config
 ### Prerequisites
 - Python 3.9+ with pip and venv module
 - `mpremote` and `mpr` tools (installed via requirements.txt)
+- `picotool` for factory reset (installed via install_dev_deps.sh)
 - MicroPython firmware on Pico W
 - Physical hardware setup (see `docs/assembly.md`)
 
@@ -37,6 +38,12 @@ source ./scripts/activate_venv.sh
 
 # Install MicroPython dependencies on the device
 ./scripts/install_pico_deps.sh
+
+# Install picotool separately (also done by install_dev_deps.sh)
+./scripts/install_picotools.sh
+
+# Install udev rules to use picotool without sudo (Linux only)
+sudo ./scripts/install_picotool_udev_rules.sh
 ```
 
 ### Project Structure
@@ -382,8 +389,9 @@ The project uses OpenCode's MCP (Model Context Protocol) integration with neovim
 
 ### Production Deployment
 1. Ensure `config.json` and TLS certificates are in `certs/` directory
-2. Run `./scripts/run_on_device.sh` to deploy
-3. Device automatically starts main loop on boot
+2. Install MicroPython dependencies on the device: `./scripts/install_pico_deps.sh` (required after factory reset)
+3. Deploy code: `./scripts/run_on_device.sh`
+4. Device automatically starts main loop on boot
 
 ### Certificates
 The MQTT connection requires TLS certificates in DER format:
@@ -399,6 +407,14 @@ Use `./scripts/factory_reset.sh` to clear device filesystem and reinstall MicroP
 2. Downloads the latest MicroPython firmware for Raspberry Pi Pico W
 3. Loads the firmware onto the device
 4. Removes the downloaded firmware file
+
+**After factory reset**, the device will reboot into normal mode. You must then:
+1. Install MicroPython dependencies: `./scripts/install_pico_deps.sh`
+2. Deploy your code: `./scripts/run_on_device.sh`
+
+**Note**: `picotool` is automatically installed when you run `./scripts/install_dev_deps.sh`. The installation script downloads a pre-built binary for your OS and architecture. You can also install it directly with `./scripts/install_picotools.sh`. If you need to install it manually, follow the instructions in the script or visit the [picotool repository](https://github.com/raspberrypi/picotool).
+
+**Permission Note**: On Linux, you may need to install udev rules to use picotool without sudo. Run `sudo ./scripts/install_picotool_udev_rules.sh` after installing picotool.
 
 ### Version Management
 1. Update version in `config.template.json` (if version field added)
