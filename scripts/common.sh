@@ -121,7 +121,7 @@ verify_device_connected() {
     local output
     output=$("$MPREMOTE" eval "1+1" 2>&1 || true)
     
-    if echo "$output" | grep -q "^2$"; then
+    if echo "$output" | tr -d '\r' | grep -q "^2$"; then
         print_success "Device found and responsive"
         return 0
     fi
