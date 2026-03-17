@@ -120,7 +120,7 @@ class TestTaskScheduler(unittest.TestCase):
         MockTime.reset()
         self.scheduler = TaskScheduler(
             wifi_check_interval=600.0,
-            ntp_sync_interval=7200.0,
+            time_sync_interval=7200.0,
             sensor_measurement_interval=100.0,
             mqtt_publish_interval=300.0,
             broker_test_interval=1800.0,
@@ -132,7 +132,7 @@ class TestTaskScheduler(unittest.TestCase):
         """Test TaskScheduler initialization with tasks."""
         # Check all tasks exist
         self.assertIsInstance(self.scheduler.wifi_check, Task)
-        self.assertIsInstance(self.scheduler.ntp_sync, Task)
+        self.assertIsInstance(self.scheduler.time_sync, Task)
         self.assertIsInstance(self.scheduler.sensor_measurement, Task)
         self.assertIsInstance(self.scheduler.mqtt_publish, Task)
         self.assertIsInstance(self.scheduler.broker_test, Task)
@@ -201,7 +201,7 @@ class TestTaskScheduler(unittest.TestCase):
         """Test that tasks with different intervals work correctly."""
         # Complete all tasks at time 1000.0 (when scheduler was created)
         self.scheduler.wifi_check.complete()
-        self.scheduler.ntp_sync.complete()
+        self.scheduler.time_sync.complete()
         self.scheduler.sensor_measurement.complete()
         self.scheduler.mqtt_publish.complete()
         self.scheduler.broker_test.complete()
@@ -214,7 +214,7 @@ class TestTaskScheduler(unittest.TestCase):
 
         # Check which tasks should be due:
         # - wifi_check: 600s interval, 35s elapsed → not due
-        # - ntp_sync: 7200s interval, 35s elapsed → not due
+        # - time_sync: 7200s interval, 35s elapsed → not due
         # - sensor_measurement: 100s interval, 35s elapsed → not due
         # - mqtt_publish: 300s interval, 35s elapsed → not due
         # - broker_test: 1800s interval, 35s elapsed → not due
@@ -222,7 +222,7 @@ class TestTaskScheduler(unittest.TestCase):
         # - led_update: 3s interval, 35s elapsed → due
 
         self.assertFalse(self.scheduler.wifi_check.is_due())
-        self.assertFalse(self.scheduler.ntp_sync.is_due())
+        self.assertFalse(self.scheduler.time_sync.is_due())
         self.assertFalse(self.scheduler.sensor_measurement.is_due())
         self.assertFalse(self.scheduler.mqtt_publish.is_due())
         self.assertFalse(self.scheduler.broker_test.is_due())

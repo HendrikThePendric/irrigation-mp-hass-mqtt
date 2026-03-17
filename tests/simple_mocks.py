@@ -247,6 +247,7 @@ class MockTime:
     """Mock time module for testing."""
 
     _ticks = 0
+    _current_time = 1000.0  # Start at 1000 seconds
 
     @staticmethod
     def sleep(seconds: float) -> None:
@@ -280,6 +281,26 @@ class MockTime:
         """Mock perf_counter."""
         return 0.0
 
+    @staticmethod
+    def time() -> float:
+        """Return mock time."""
+        return MockTime._current_time
+
+    @staticmethod
+    def set_time(new_time: float) -> None:
+        """Set mock time for testing."""
+        MockTime._current_time = new_time
+
+    @staticmethod
+    def advance(seconds: float) -> None:
+        """Advance mock time by seconds."""
+        MockTime._current_time += seconds
+
+    @staticmethod
+    def reset_time() -> None:
+        """Reset mock time to default."""
+        MockTime._current_time = 1000.0
+
 
 # Mock ADS1x15 module for ADC
 class MockADS1115:
@@ -302,12 +323,17 @@ class MockADS1115:
 
 # Mock for umqtt.simple module
 class MockMQTTClient:
+    # Class-level list to track all instances
+    instances = []
+
     def __init__(self, *args, **kwargs):
         self.published_messages = []
         self.connected = False
         self.disconnect_called = False
         self.connect_calls = []
         self.subscribe_calls = []
+        # Register this instance
+        MockMQTTClient.instances.append(self)
 
     def connect(self, *args, **kwargs):
         self.connected = True
@@ -347,6 +373,11 @@ class MockMQTTClient:
 
         return MockSocket()
 
+    @classmethod
+    def reset_instances(cls):
+        """Clear all tracked instances."""
+        cls.instances.clear()
+
 
 # Mock SSL/TLS module for MQTT over TLS tests
 class MockSSLContext:
@@ -384,6 +415,81 @@ class MockADS1x15Module:
             return self.voltage_return_value
 
 
+# Mock network module (for WiFi)
+class MockNetwork:
+    """Mock network module for WiFi."""
+
+    STA_IF = 0
+    AP_IF = 1
+
+    class WLAN:
+        def __init__(self, interface):
+            self.interface = interface
+            self.active_calls = []
+            self.connect_calls = []
+            self.isconnected_calls = []
+            self._active = False
+            self._connected = False
+            self._config_calls = []
+
+        def active(self, value):
+            self.active_calls.append(value)
+            self._active = value
+
+        def connect(self, ssid, password):
+            self.connect_calls.append((ssid, password))
+            self._connected = True
+
+        def isconnected(self):
+            self.isconnected_calls.append(())
+            return self._connected
+
+        def config(self, **kwargs):
+            self._config_calls.append(kwargs)
+
+        def status(self):
+            return 3  # STAT_GOT_IP
+
+        def ifconfig(self):
+            """Return mock network configuration."""
+            return ("192.168.1.100", "255.255.255.0", "192.168.1.1", "8.8.8.8")
+
+    # Create a mock instance for tracking
+    wlan_instance = None
+
+    @classmethod
+    def create_wlan(cls, interface):
+        """Create and track a WLAN instance."""
+        cls.wlan_instance = cls.WLAN(interface)
+        return cls.wlan_instance
+
+    @classmethod
+    def reset(cls):
+        """Reset the mock state."""
+        cls.wlan_instance = None
+
+
+# Mock rp2 module
+class MockRP2:
+    """Mock rp2 module for country setting."""
+
+    def country(self, country_code):
+        self.country_code = country_code
+        self.country_calls = [country_code]
+
+
+# Mock gc module
+class MockGC:
+    """Mock gc module for garbage collection."""
+
+    def __init__(self):
+        self.collect_calls = []
+
+    def collect(self):
+        self.collect_calls.append(())
+        return 0  # Return number of collected objects
+
+
 # Global mock instances
 mock_machine = MockMachine()
 mock_os = MockOS()
@@ -394,3 +500,6 @@ mock_ads1x15 = MockADS1x15Module()
 MockUMQTTClass = type("MockUMQTT", (), {"MQTTClient": MockMQTTClient})
 mock_umqtt_simple = MockUMQTTClass()
 mock_ssl_context = MockSSLContext
+mock_network = MockNetwork()
+mock_rp2 = MockRP2()
+mock_gc = MockGC()

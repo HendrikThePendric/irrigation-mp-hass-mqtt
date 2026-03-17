@@ -63,7 +63,7 @@ class TestTimeKeeperNew(unittest.TestCase):
         self.assertIsNotNone(time_keeper._rtc)
 
         # Check that intervals are set
-        self.assertEqual(time_keeper._sync_interval, 7200)
+        self.assertEqual(time_keeper._check_interval, 30)
         self.assertEqual(time_keeper._retry_interval, 60)
 
     def test_time_keeper_get_current_cet_datetime_str(self) -> None:
