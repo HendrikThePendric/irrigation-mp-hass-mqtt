@@ -233,6 +233,9 @@ class TestIrrigationStationProcessInstructionsComprehensive(unittest.TestCase):
 
     def setUp(self) -> None:
         """Set up test fixtures with 3 irrigation points (A, B, C)."""
+        # Reset mock time to known state
+        mock_time.reset_time()
+        mock_time.reset_ticks()
         self.config = MockConfig()
         self.logger = MockLogger()
 
@@ -748,6 +751,68 @@ class TestIrrigationStationProcessInstructionsComprehensive(unittest.TestCase):
                 ("C", "open"),
             ],
         )
+
+    def test_valve_timeout_tracking(self) -> None:
+        """Test that valve open timestamp is tracked correctly."""
+        # Initially no valve open
+        self.assertIsNone(self.station._last_valve_open_time)
+
+        # Open valve A
+        commands = [ValveState("A", "open")]
+        self.station.process_instructions(commands)
+
+        # Check timestamp set
+        self.assertIsNotNone(self.station._last_valve_open_time)
+        initial_time = self.station._last_valve_open_time
+
+        # Advance time by 10 seconds
+        mock_time.advance(10.0)
+
+        # Open valve B (closes A)
+        commands = [ValveState("B", "open")]
+        self.station.process_instructions(commands)
+
+        # Check timestamp updated (new valve opened)
+        self.assertIsNotNone(self.station._last_valve_open_time)
+        self.assertNotEqual(self.station._last_valve_open_time, initial_time)
+
+        # Close valve B
+        commands = [ValveState("B", "closed")]
+        self.station.process_instructions(commands)
+
+        # Check timestamp cleared
+        self.assertIsNone(self.station._last_valve_open_time)
+
+    def test_check_valve_timeout(self) -> None:
+        """Test auto-closing valve after timeout."""
+        # Open valve A
+        commands = [ValveState("A", "open")]
+        self.station.process_instructions(commands)
+
+        # Not enough time elapsed - should not close
+        result = self.station.check_valve_timeout()  # No argument
+        self.assertIsNone(result)
+        self.assertEqual(self.point_a.valve_state, "open")
+
+        # Advance time just under timeout (44 minutes)
+        mock_time.advance(44 * 60)
+        result = self.station.check_valve_timeout()
+        self.assertIsNone(result)
+        self.assertEqual(self.point_a.valve_state, "open")
+
+        # Advance past timeout (additional 2 minutes)
+        mock_time.advance(2 * 60)
+        result = self.station.check_valve_timeout()
+        self.assertIsNotNone(result)
+        self.assertEqual(result.point_id, "A")
+        self.assertEqual(result.state, "closed")
+        self.assertEqual(self.point_a.valve_state, "closed")
+        self.assertIsNone(self.station._last_valve_open_time)
+
+        # Check logging
+        auto_close_logs = [msg for msg in self.logger.messages if "[Auto-Close]" in msg]
+        self.assertEqual(len(auto_close_logs), 1)
+        self.assertIn("A", auto_close_logs[0])
 
 
 if __name__ == "__main__":

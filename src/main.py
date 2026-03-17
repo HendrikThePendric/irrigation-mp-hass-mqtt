@@ -1,6 +1,6 @@
 from machine import reset
 from time import sleep
-from irrigation_system import IrrigationSystem
+from firmware_controller import FirmwareController
 
 PRINT_LOGS = True
 
@@ -14,7 +14,7 @@ if PRINT_LOGS:
 
 def main() -> None:
     # Create the irrigation system
-    system = IrrigationSystem("./config.json", PRINT_LOGS)
+    system = FirmwareController("./config.json", PRINT_LOGS)
 
     try:
         while True:

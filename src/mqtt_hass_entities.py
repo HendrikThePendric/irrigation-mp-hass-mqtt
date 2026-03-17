@@ -1,6 +1,7 @@
 from typing import Any, Dict
 from json import dumps
 from umqtt.simple import MQTTClient
+from valve import Valve
 from logger import Logger
 
 
@@ -107,10 +108,10 @@ class MqttHassValve(MqttHassEntity):
             "unique_id": f"{self._point_id}_valve",
             "state_topic": self._state_topic,
             "command_topic": self._command_topic,
-            "payload_open": "open",
-            "payload_close": "closed",
-            "state_open": "open",
-            "state_closed": "closed",
+            "payload_open": Valve.STATE_OPEN,
+            "payload_close": Valve.STATE_CLOSED,
+            "state_open": Valve.STATE_OPEN,
+            "state_closed": Valve.STATE_CLOSED,
             "optimistic": True,
             "availability_topic": self._availability_topic,
             "device": self._device_info,

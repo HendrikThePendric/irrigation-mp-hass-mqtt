@@ -2,11 +2,14 @@ from machine import I2C, Pin
 from ads1x15 import ADS1115
 from config import Config
 from irrigation_point import IrrigationPoint
+from valve import Valve
 from logger import Logger
 from irrigation_states import ValveState, SensorState
+import time
 
 
 class IrrigationStation:
+    MAX_VALVE_OPEN_TIME = 45 * 60  # 45 minutes
     """Manages multiple irrigation points and their shared resources."""
 
     def __init__(self, config: Config, logger: Logger) -> None:
@@ -14,6 +17,8 @@ class IrrigationStation:
         self._config = config
         self._points: dict[str, IrrigationPoint] = {}
         self._logger = logger
+        # Valve auto-close tracking
+        self._last_valve_open_time: float | None = None
         # Initialize I2C bus (shared for all ADS modules)
         self._i2c = I2C(0, scl=Pin(1), sda=Pin(0), freq=400000)
 
@@ -44,7 +49,7 @@ class IrrigationStation:
         # Identify which valve is currently open
         current_open_point_id: str | None = None
         for pid, point in self._points.items():
-            if point.get_valve_state() == IrrigationPoint.STATE_OPEN:
+            if point.get_valve_state() == Valve.STATE_OPEN:
                 current_open_point_id = pid
                 break
 
@@ -59,8 +64,8 @@ class IrrigationStation:
                 continue
 
             if (
-                command.state != IrrigationPoint.STATE_OPEN
-                and command.state != IrrigationPoint.STATE_CLOSED
+                command.state != Valve.STATE_OPEN
+                and command.state != Valve.STATE_CLOSED
             ):
                 self._logger.log(
                     f"Unknown valve command: {command.state} for {command.point_id}"
@@ -69,20 +74,18 @@ class IrrigationStation:
 
             # Opening a new valve
             if (
-                command.state == IrrigationPoint.STATE_OPEN
+                command.state == Valve.STATE_OPEN
                 and command.point_id != last_command_opened_point_id
             ):
                 # Close other if present
                 if last_command_opened_point_id:
-                    valve_states[last_command_opened_point_id] = (
-                        IrrigationPoint.STATE_CLOSED
-                    )
+                    valve_states[last_command_opened_point_id] = Valve.STATE_CLOSED
                 # Update last_command_opened_point_id
                 last_command_opened_point_id = command.point_id
 
             # Unset open_point_id when all valves are closed
             if (
-                command.state == IrrigationPoint.STATE_CLOSED
+                command.state == Valve.STATE_CLOSED
                 and command.point_id == last_command_opened_point_id
             ):
                 last_command_opened_point_id = None
@@ -94,13 +97,17 @@ class IrrigationStation:
             and current_open_point_id != last_command_opened_point_id
         ):
             self._points[current_open_point_id].close_valve()
-            valve_states[current_open_point_id] = IrrigationPoint.STATE_CLOSED
+            # Reset auto-close tracking (only one valve can be open at a time)
+            self._last_valve_open_time = None
+            valve_states[current_open_point_id] = Valve.STATE_CLOSED
 
         if (
             last_command_opened_point_id
             and current_open_point_id != last_command_opened_point_id
         ):
             self._points[last_command_opened_point_id].open_valve()
+            # Update auto-close tracking
+            self._last_valve_open_time = time.time()
 
         for pid, state in valve_states.items():
             valve_updates.append(ValveState(pid, state))
@@ -124,6 +131,41 @@ class IrrigationStation:
             moisture = point.get_sensor_value()
             sensor_states.append(SensorState(point_id, moisture))
         return sensor_states
+
+    def check_valve_timeout(self) -> ValveState | None:
+        """Check if currently open valve has exceeded 45-minute timeout.
+
+        Returns:
+            ValveState for auto-closed valve, or None if no action needed
+        """
+        # Find which valve is currently open (only one can be open at a time)
+        open_point_id: str | None = None
+        for pid, point in self._points.items():
+            if point.get_valve_state() == Valve.STATE_OPEN:
+                open_point_id = pid
+                break
+
+        # No valve open → ensure tracking is reset
+        if open_point_id is None:
+            self._last_valve_open_time = None
+            return None
+
+        # Valve is open but we aren’t tracking it (e.g., opened externally)
+        # Start tracking now to prevent indefinite opening
+        if self._last_valve_open_time is None:
+            self._last_valve_open_time = time.time()
+            return None
+
+        elapsed = time.time() - self._last_valve_open_time
+        if elapsed >= self.MAX_VALVE_OPEN_TIME:
+            self._points[open_point_id].close_valve()
+            self._last_valve_open_time = None
+            self._logger.log(
+                f"[Auto-Close] {open_point_id}: Valve closed after {elapsed / 60:.1f} minutes"
+            )
+            return ValveState(open_point_id, Valve.STATE_CLOSED)
+
+        return None
 
     def _setup_ads_modules(self) -> None:
         """Deduplicate ADS addresses and initialize ADS modules."""

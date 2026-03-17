@@ -11,7 +11,7 @@ from wifi_manager import WiFiManager
 import gc
 
 
-class IrrigationSystem:
+class FirmwareController:
     """Encapsulates the entire irrigation system with a tick-based main loop."""
 
     def __init__(
@@ -96,6 +96,13 @@ class IrrigationSystem:
         if valve_commands:
             valve_updates = self._station.process_instructions(valve_commands)
             self._mqtt_manager.publish_valve_states(valve_updates)
+
+        # Check for valve timeout
+        if self._scheduler.valve_timeout_check.is_due():
+            valve_update = self._station.check_valve_timeout()
+            if valve_update:
+                self._mqtt_manager.publish_valve_states([valve_update])
+            self._scheduler.valve_timeout_check.complete()
 
         # Execute sensor tasks
         if self._scheduler.sensor_measurement.is_due():

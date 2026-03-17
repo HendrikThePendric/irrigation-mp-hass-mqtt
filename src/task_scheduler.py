@@ -54,6 +54,7 @@ class TaskScheduler:
         broker_test_interval: float = 1800.0,  # 30 minutes
         garbage_collect_interval: float = 30.0,  # 30 seconds
         led_update_interval: float = 3.0,  # 3 seconds
+        valve_timeout_check_interval: float = 30.0,  # 30 seconds
     ) -> None:
         """
         Initialize task scheduler with predefined tasks.
@@ -66,6 +67,7 @@ class TaskScheduler:
             broker_test_interval: MQTT broker connectivity test interval in seconds
             garbage_collect_interval: Garbage collection interval in seconds
             led_update_interval: LED status update interval in seconds
+            valve_timeout_check_interval: Valve timeout check interval in seconds
         """
         self.wifi_check = Task(wifi_check_interval)
         self.time_sync = Task(time_sync_interval)
@@ -74,6 +76,7 @@ class TaskScheduler:
         self.broker_test = Task(broker_test_interval)
         self.garbage_collect = Task(garbage_collect_interval)
         self.led_update = Task(led_update_interval)
+        self.valve_timeout_check = Task(valve_timeout_check_interval)
 
     def update(self) -> None:
         """Update status of all tasks based on current time."""
@@ -85,3 +88,4 @@ class TaskScheduler:
         self.broker_test.update_status(current_time)
         self.garbage_collect.update_status(current_time)
         self.led_update.update_status(current_time)
+        self.valve_timeout_check.update_status(current_time)

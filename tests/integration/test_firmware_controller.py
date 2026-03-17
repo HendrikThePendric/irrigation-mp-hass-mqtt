@@ -274,10 +274,10 @@ class TestIrrigationSystemE2E(unittest.TestCase):
         config_module._load_json_file = lambda file_path: self.test_config
 
         # Now import and create the irrigation system
-        from irrigation_system import IrrigationSystem
+        from firmware_controller import FirmwareController
 
         # Create the irrigation system (uses mocked dependencies via sys.modules)
-        self.system = IrrigationSystem("./config.json", print_logs=True)
+        self.system = FirmwareController("./config.json", print_logs=True)
 
         # Get references to components for easier access in tests
         self.logger = self.system.logger
@@ -682,6 +682,58 @@ class TestIrrigationSystemE2E(unittest.TestCase):
             ads_mock.read = original_read
 
         print("✅ Test 6 passed: Sensor read failure handled correctly")
+
+    def test_valve_auto_close_after_timeout(self) -> None:
+        """Scenario 7: When a valve has been open for 45+ minutes,
+        the system automatically closes it and publishes status update."""
+
+        # Initially all valves closed
+        self._verify_valve_state("locationa", "closed")
+        self._verify_valve_state("locationb", "closed")
+        self._verify_valve_state("locationc", "closed")
+
+        # Clear any previous messages
+        self.mock_mqtt_client.published_messages.clear()
+
+        # Open valve A via MQTT command
+        self._simulate_valve_command("locationa", "open")
+        self.system.tick()
+
+        # Verify valve A is open
+        self._verify_valve_state("locationa", "open")
+
+        # Clear messages after opening
+        self.mock_mqtt_client.published_messages.clear()
+
+        # Run tick once to complete initial timeout check (task becomes due immediately)
+        # This will mark valve_timeout_check as completed (last_completion_time = now)
+        self.system.tick()
+
+        # Advance time just under timeout (44 minutes)
+        mock_time.advance(44 * 60)  # 44 minutes
+
+        # Run tick - valve should NOT close
+        self.system.tick()
+        self._verify_valve_state("locationa", "open")
+
+        # Advance time past 45-minute threshold (additional 2 minutes)
+        mock_time.advance(2 * 60)  # total 46 minutes
+
+        # Run tick - valve timeout check task is due (30 second interval)
+        self.system.tick()
+
+        # Verify valve A is now closed
+        self._verify_valve_state("locationa", "closed")
+
+        # Verify MQTT status update was published
+        valve_messages = self._get_published_valve_messages("locationa")
+        self.assertTrue(
+            len(valve_messages) > 0, "No status update published for auto-close"
+        )
+        last_message = valve_messages[-1]
+        self.assertTrue("closed" in last_message[1], "Valve should be closed in update")
+
+        print("✅ Test 7 passed: Valve auto-closed after 45+ minutes timeout")
 
 
 if __name__ == "__main__":

@@ -1,7 +1,10 @@
+from valve import Valve
+
+
 class ValveState:
     """Valve command (what we want) or status (what happened)."""
 
-    VALID_STATES = {"open", "closed"}
+    VALID_STATES = {Valve.STATE_OPEN, Valve.STATE_CLOSED}
 
     def __init__(self, point_id: str, state: str) -> None:
         self.point_id = point_id
