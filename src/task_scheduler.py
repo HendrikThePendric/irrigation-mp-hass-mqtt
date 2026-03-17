@@ -1,5 +1,4 @@
 from time import time
-from typing import Optional
 
 
 class Task:
@@ -49,7 +48,7 @@ class TaskScheduler:
     def __init__(
         self,
         wifi_check_interval: float = 600.0,  # 10 minutes
-        ntp_sync_interval: float = 7200.0,  # 2 hours
+        time_sync_interval: float = 30.0,  # 30 seconds (checks if sync needed every 30s)
         sensor_measurement_interval: float = 100.0,  # 100 seconds (from config)
         mqtt_publish_interval: float = 300.0,  # 5 minutes
         broker_test_interval: float = 1800.0,  # 30 minutes
@@ -61,7 +60,7 @@ class TaskScheduler:
 
         Args:
             wifi_check_interval: WiFi connection check interval in seconds
-            ntp_sync_interval: NTP time sync interval in seconds
+            time_sync_interval: NTP time sync check interval in seconds (actual sync only every 2 hours)
             sensor_measurement_interval: Sensor measurement interval in seconds
             mqtt_publish_interval: MQTT status publish interval in seconds
             broker_test_interval: MQTT broker connectivity test interval in seconds
@@ -69,7 +68,7 @@ class TaskScheduler:
             led_update_interval: LED status update interval in seconds
         """
         self.wifi_check = Task(wifi_check_interval)
-        self.ntp_sync = Task(ntp_sync_interval)
+        self.time_sync = Task(time_sync_interval)
         self.sensor_measurement = Task(sensor_measurement_interval)
         self.mqtt_publish = Task(mqtt_publish_interval)
         self.broker_test = Task(broker_test_interval)
@@ -79,16 +78,10 @@ class TaskScheduler:
     def update(self) -> None:
         """Update status of all tasks based on current time."""
         current_time = time()
-        # Use explicit iteration instead of __dict__ for MicroPython compatibility
-        for attr_name in [
-            "wifi_check",
-            "ntp_sync",
-            "sensor_measurement",
-            "mqtt_publish",
-            "broker_test",
-            "garbage_collect",
-            "led_update",
-        ]:
-            task = getattr(self, attr_name, None)
-            if isinstance(task, Task):
-                task.update_status(current_time)
+        self.wifi_check.update_status(current_time)
+        self.time_sync.update_status(current_time)
+        self.sensor_measurement.update_status(current_time)
+        self.mqtt_publish.update_status(current_time)
+        self.broker_test.update_status(current_time)
+        self.garbage_collect.update_status(current_time)
+        self.led_update.update_status(current_time)

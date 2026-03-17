@@ -53,9 +53,9 @@ def main() -> None:
                 wifi_manager.check_connection()
                 scheduler.wifi_check.complete()
 
-            if scheduler.ntp_sync.is_due():
-                if time_keeper.sync_time():
-                    scheduler.ntp_sync.complete()
+            if scheduler.time_sync.is_due():
+                time_keeper.sync_time()
+                scheduler.time_sync.complete()
 
             if scheduler.garbage_collect.is_due():
                 gc.collect()

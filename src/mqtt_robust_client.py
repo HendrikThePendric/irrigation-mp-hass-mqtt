@@ -27,6 +27,11 @@ class MqttRobustClient(MQTTClient):
         )
         self._logger = logger
         self._on_reconnect_callback = on_reconnect_callback
+        # Store LWT parameters for reconnection
+        self._lwt_topic = None
+        self._lwt_msg = None
+        self._lwt_retain = False
+        self._lwt_qos = 0
 
     def delay(self, i):
         multiplier = i if isinstance(i, int) and i > 0 else 1
@@ -44,6 +49,11 @@ class MqttRobustClient(MQTTClient):
 
         while True:
             try:
+                # Restore LWT if we have stored parameters
+                if self._lwt_topic:
+                    self.set_last_will(
+                        self._lwt_topic, self._lwt_msg, self._lwt_retain, self._lwt_qos
+                    )
                 result = super().connect(clean_session=False)
                 # Call callback to toggle boolean flag (light work only)
                 if self._on_reconnect_callback:
@@ -98,6 +108,12 @@ class MqttRobustClient(MQTTClient):
         lwt_qos=0,
     ):
         """Connect with LWT support and infinite retry"""
+        # Store LWT parameters for reconnection
+        self._lwt_topic = lwt_topic
+        self._lwt_msg = lwt_msg
+        self._lwt_retain = lwt_retain
+        self._lwt_qos = lwt_qos
+
         if lwt_topic:
             self.set_last_will(lwt_topic, lwt_msg, lwt_retain, lwt_qos)
 

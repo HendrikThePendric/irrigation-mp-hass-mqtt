@@ -31,6 +31,7 @@ class MqttHassManager:
         self._config = config
         self._logger = logger
         self._pending_valve_commands: list[ValveState] = []
+        self._pending_reconnect = False
         self._availability_topic = f"irrigation/{self._config.station_id}/availability"
         self._broker_connectivity_topic = (
             f"irrigation/{self._config.station_id}/broker_connectivity"
@@ -51,7 +52,36 @@ class MqttHassManager:
             keepalive=KEEPALIVE,
             ssl=create_ssl_context(),
             logger=self._logger,
+            on_reconnect_callback=self._on_reconnect_callback,
         )
+
+    def _on_reconnect_callback(self) -> None:
+        """Called when MQTT client reconnects after a disconnection."""
+        self._pending_reconnect = True
+
+    def _handle_pending_reconnect(self) -> None:
+        """Handle reconnection by restoring availability and subscriptions."""
+        self._logger.log(
+            "Reconnected to MQTT - restoring availability and subscriptions"
+        )
+        self._set_online()
+        # Ensure callback is still set after reconnection
+        self._client.set_callback(self._handle_message)
+        self._resubscribe_after_reconnect()
+
+    def _resubscribe_after_reconnect(self) -> None:
+        """Resubscribe to all topics after reconnection since we use clean_session=True initially"""
+        try:
+            # Resubscribe to Home Assistant status
+            self._client.subscribe("homeassistant/status", qos=0)
+
+            # Resubscribe to all valve command topics
+            for valve_messager in self._valve_messagers.values():
+                valve_messager.subscribe_to_command_topic()
+
+            self._logger.log("Resubscribed to all command topics after reconnection")
+        except Exception as e:
+            self._logger.log(f"Failed to resubscribe after reconnection: {e}")
 
     def setup(self) -> None:
         self._connect()
@@ -62,6 +92,10 @@ class MqttHassManager:
 
     def process_messages(self) -> None:
         """Process incoming MQTT messages and store them."""
+        if self._pending_reconnect:
+            self._handle_pending_reconnect()
+            self._pending_reconnect = False
+
         self._client.check_msg()
 
     def get_station_instructions(self) -> list[ValveState]:
