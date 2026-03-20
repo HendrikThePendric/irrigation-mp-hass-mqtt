@@ -1,0 +1,68 @@
+[tool.pyright]
+# Type checking mode
+typeCheckingMode = "basic"
+
+# Disable various reports for test compatibility
+reportUnnecessaryTypeIgnoreComment = false
+reportUnknownMemberType = "none"
+reportUnknownVariableType = "none"
+reportUnknownArgumentType = "none"
+reportUntypedFunctionDecorator = "none"
+reportUntypedClassDecorator = "none"
+reportUnusedCallResult = "none"
+reportPrivateUsage = "none"
+reportUninitializedInstanceVariable = "none"
+
+# Disable unused variable/import warnings (common in tests)
+reportUnusedVariable = "none"
+reportUnusedImport = "none"
+reportUnusedClass = "none"
+reportUnusedFunction = "none"
+reportUnusedCoroutine = "none"
+
+# Disable missing module source warnings (sys, os, etc. in tests)
+reportMissingModuleSource = "none"
+
+# Exclude test directories
+exclude = [
+    "**/tests/**",
+    "**/.venv/**",
+    "**/__pycache__/**",
+    "**/*.pyc"
+]
+
+[tool.ruff]
+# Linting configuration (copied from .ruff.toml)
+line-length = 88
+
+[lint]
+select = ["E", "F", "I", "N", "W"]
+exclude = [
+    ".venv",
+    ".git",
+    "__pycache__",
+    "build",
+    "dist",
+    "*.egg-info",
+]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/unit/*.py" = [
+    "E402",  # Module level import not at top
+    "E501",  # Line too long
+    "E731",  # Do not assign a lambda expression - common in mocks
+    "F401",  # Unused import
+    "F403",  # Wildcard import
+    "F405",  # Name undefined
+    "I001",  # Unsorted imports
+    "N802",  # Non-lowercase function name
+    "N803",  # Argument name should be lowercase
+    "PLR0913",  # Too many arguments
+    "PLR2004",  # Magic value
+    "S101",  # Use of assert
+]
+
+[format]
+quote-style = "double"
+line-ending = "auto"
+indent-style = "space"

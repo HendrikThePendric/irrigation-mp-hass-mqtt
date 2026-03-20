@@ -1,0 +1,20 @@
+{
+    "$schema": "https://opencode.ai/config.json",
+    // Using global MCP servers (neovim defined in ~/.config/opencode/opencode.json)
+    // Enable specific MCP tools for this project (overriding global disable)
+    "tools": {
+        "github_*": true,
+        "grep_*": true,
+        "context7_*": true,
+        "neovim_*": true
+    },
+    // Allow MCP tools for this project (overriding global deny)
+    "permission": {
+        "github_*": "allow",
+        "grep_*": "allow",
+        "context7_*": "allow",
+        "neovim_*": "allow"
+    },
+    // Instructions for this project
+    "instructions": ["AGENTS.md", "README.md", "config.template.json", "pyrightconfig.json", "scripts/install_dev_deps.sh", "scripts/run_on_device.sh"]
+}

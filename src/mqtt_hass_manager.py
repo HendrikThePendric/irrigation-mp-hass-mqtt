@@ -1,9 +1,9 @@
-from machine import Timer
 from mqtt_robust_client import MqttRobustClient
-from umqtt.simple import MQTTClient
+
 from config import Config
 from logger import Logger
-from irrigation_station import IrrigationStation
+from irrigation_states import ValveState, SensorState
+
 from mqtt_hass_entities import MqttHassSensor, MqttHassValve, MessagerParams
 from ssl import SSLContext, PROTOCOL_TLS_CLIENT
 from time import ticks_ms
@@ -13,7 +13,6 @@ CERT_PATH = "./irrigationbackyard_crt.der"
 KEY_PATH = "./irrigationbackyard_key.der"
 PORT = 8883
 KEEPALIVE = 60
-BROKER_CONNECTIVITY_TEST_INTERVAL = 1800000
 
 
 def create_ssl_context() -> SSLContext:
@@ -28,23 +27,17 @@ class MqttHassManager:
         self,
         config: Config,
         logger: Logger,
-        station: IrrigationStation,
     ) -> None:
         self._config = config
         self._logger = logger
-        self._station = station
-        self._timer = Timer(-1)
-        self._broker_connectivity_timer = Timer(-1)
-        self._pending_publish = False
+        self._pending_valve_commands: list[ValveState] = []
         self._pending_reconnect = False
-        self._pending_broker_connectivity_test = False
         self._availability_topic = f"irrigation/{self._config.station_id}/availability"
         self._broker_connectivity_topic = (
             f"irrigation/{self._config.station_id}/broker_connectivity"
         )
-        self._sensor_messagers = []
-        self._valve_messagers = []
-        self._command_topic_to_valve = {}
+        self._sensor_messagers: dict[str, MqttHassSensor] = {}
+        self._valve_messagers: dict[str, MqttHassValve] = {}
         self._device_info = {
             "identifiers": [self._config.station_id],
             "name": self._config.station_name,
@@ -62,37 +55,18 @@ class MqttHassManager:
             on_reconnect_callback=self._on_reconnect_callback,
         )
 
-    def setup(self) -> None:
-        self._connect()
-        self._client.set_callback(self._handle_message)
-        self._set_online()
-        self._setup_entities()
-        self._monitor_hass_status()
-        self._start_periodic_publish()
-        self._start_broker_connectivity_monitoring()
-
-    def check_msg(self) -> None:
-        self._client.check_msg()
-
-    def handle_pending_messages(self) -> None:
-        if self._pending_broker_connectivity_test:
-            self._handle_pending_broker_connectivity_test()
-            self._pending_broker_connectivity_test = False
-
-        if self._pending_reconnect:
-            self._handle_pending_reconnect()
-            self._pending_reconnect = False
-
-        if self._pending_publish:
-            for sensor_messager in self._sensor_messagers:
-                sensor_messager.publish_moisture_level()
-            self._pending_publish = False
+    def _on_reconnect_callback(self) -> None:
+        """Called when MQTT client reconnects after a disconnection."""
+        self._pending_reconnect = True
 
     def _handle_pending_reconnect(self) -> None:
+        """Handle reconnection by restoring availability and subscriptions."""
         self._logger.log(
             "Reconnected to MQTT - restoring availability and subscriptions"
         )
         self._set_online()
+        # Ensure callback is still set after reconnection
+        self._client.set_callback(self._handle_message)
         self._resubscribe_after_reconnect()
 
     def _resubscribe_after_reconnect(self) -> None:
@@ -102,19 +76,62 @@ class MqttHassManager:
             self._client.subscribe("homeassistant/status", qos=0)
 
             # Resubscribe to all valve command topics
-            for valve_messager in self._valve_messagers:
+            for valve_messager in self._valve_messagers.values():
                 valve_messager.subscribe_to_command_topic()
 
             self._logger.log("Resubscribed to all command topics after reconnection")
         except Exception as e:
             self._logger.log(f"Failed to resubscribe after reconnection: {e}")
 
-    def _handle_pending_broker_connectivity_test(self) -> None:
-        current_time = ticks_ms()
-        test_payload = f"broker_connectivity_test_{current_time}"
+    def setup(self) -> None:
+        self._connect()
+        self._client.set_callback(self._handle_message)
+        self._set_online()
+        self._setup_entities()
+        self._monitor_hass_status()
 
+    def process_messages(self) -> None:
+        """Process incoming MQTT messages and store them."""
+        if self._pending_reconnect:
+            self._handle_pending_reconnect()
+            self._pending_reconnect = False
+
+        self._client.check_msg()
+
+    def get_station_instructions(self) -> list[ValveState]:
+        """Return and clear pending valve commands."""
+        commands = self._pending_valve_commands[:]
+        self._pending_valve_commands.clear()
+        return commands
+
+    def publish_valve_states(self, valve_states: list[ValveState]) -> None:
+        """Publish valve states via MQTT."""
+        for valve_state in valve_states:
+            if valve_state.point_id in self._valve_messagers:
+                self._valve_messagers[valve_state.point_id].publish_valve_state(
+                    valve_state.state
+                )
+            else:
+                self._logger.log(f"Unknown point_id for valve: {valve_state.point_id}")
+
+    def publish_sensor_states(self, sensor_states: list[SensorState]) -> None:
+        """Publish sensor readings via MQTT."""
+        for sensor_state in sensor_states:
+            if sensor_state.point_id in self._sensor_messagers:
+                self._sensor_messagers[sensor_state.point_id].publish_moisture_level(
+                    sensor_state.moisture
+                )
+            else:
+                self._logger.log(
+                    f"Unknown point_id for sensor: {sensor_state.point_id}"
+                )
+
+    def test_broker_connectivity(self) -> None:
+        """Test MQTT broker connectivity."""
+        current_time = ticks_ms()
+        test_payload = "broker_connectivity_test_" + str(current_time)
         self._client.publish(self._broker_connectivity_topic, test_payload, qos=1)
-        self._logger.log(f"Broker connectivity test acknowledged: {test_payload}")
+        self._logger.log("Broker connectivity test: " + test_payload)
 
     def _connect(self) -> None:
         self._client.connect(
@@ -141,17 +158,13 @@ class MqttHassManager:
         except Exception as e:
             self._logger.log(f"Failed to publish LWT online message: {e}")
 
-    def _on_reconnect_callback(self) -> None:
-        self._pending_reconnect = True
-
     def _setup_entities(self) -> None:
-        for _, point in self._config.irrigation_points.items():
-            irrigation_point = self._station.get_point(point.id)
-
+        for point_id, point_config in self._config.irrigation_points.items():
             params = MessagerParams(
                 mqtt_client=self._client,
                 station_id=self._config.station_id,
-                irrigation_point=irrigation_point,
+                point_id=point_id,
+                point_config=point_config,
                 device_info=self._device_info,
                 availability_topic=self._availability_topic,
                 logger=self._logger,
@@ -159,15 +172,28 @@ class MqttHassManager:
             sensor_messager = MqttHassSensor(params)
             valve_messager = MqttHassValve(params)
 
-            self._sensor_messagers.append(sensor_messager)
-            self._valve_messagers.append(valve_messager)
-            self._command_topic_to_valve[valve_messager._command_topic] = valve_messager
+            self._sensor_messagers[point_id] = sensor_messager
+            self._valve_messagers[point_id] = valve_messager
             try:
                 valve_messager.subscribe_to_command_topic()
             except Exception as e:
                 self._logger.log(
                     f"Failed to subscribe to {valve_messager._command_topic}: {e}"
                 )
+
+    def _parse_valve_command(self, topic: str, payload: str) -> ValveState:
+        """Parse valve command from MQTT topic and payload."""
+        # Extract point_id from topic: irrigation/{station_id}/{point_id}/valve/set
+        parts = topic.split("/")
+        if (
+            len(parts) >= 4
+            and parts[0] == "irrigation"
+            and parts[1] == self._config.station_id
+        ):
+            point_id = parts[2]
+            return ValveState(point_id, payload.strip().lower())
+        else:
+            raise ValueError(f"Malformed valve command topic: {topic}")
 
     def _handle_message(self, topic_bytes: bytes, msg_bytes: bytes) -> None:
         topic = topic_bytes.decode()
@@ -177,33 +203,12 @@ class MqttHassManager:
             self._handle_ha_status_message(msg)
             return
 
-        valve_messager = self._command_topic_to_valve.get(topic)
-        if valve_messager:
+        if topic.endswith("/valve/set"):
             try:
-                valve_messager.handle_command_message(msg)
-            except Exception as e:
-                self._logger.log(f"Error handling command message for {topic}: {e}")
-
-    def _start_periodic_publish(self) -> None:
-        self._timer.init(
-            period=self._config.publish_interval_ms,
-            mode=Timer.PERIODIC,
-            callback=self._set_pending_publish,
-        )
-
-    def _set_pending_publish(self, _=None) -> None:
-        self._pending_publish = True
-
-    def _start_broker_connectivity_monitoring(self) -> None:
-        self._broker_connectivity_timer.init(
-            period=BROKER_CONNECTIVITY_TEST_INTERVAL,
-            mode=Timer.PERIODIC,
-            callback=self._set_pending_broker_connectivity_test,
-        )
-        self._logger.log("Broker connectivity monitoring started")
-
-    def _set_pending_broker_connectivity_test(self, _=None) -> None:
-        self._pending_broker_connectivity_test = True
+                valve_command = self._parse_valve_command(topic, msg)
+                self._pending_valve_commands.append(valve_command)
+            except ValueError as e:
+                self._logger.log(f"Invalid valve command: {e}")
 
     def _monitor_hass_status(self) -> None:
         try:
@@ -223,10 +228,10 @@ class MqttHassManager:
         try:
             self._client.publish(self._availability_topic, "online", retain=True)
 
-            for sensor_messager in self._sensor_messagers:
+            for sensor_messager in self._sensor_messagers.values():
                 sensor_messager.publish_discovery_message()
 
-            for valve_messager in self._valve_messagers:
+            for valve_messager in self._valve_messagers.values():
                 valve_messager.publish_discovery_message()
 
         except Exception as e:

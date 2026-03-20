@@ -19,6 +19,7 @@ The system monitors soil moisture and controls irrigation valves based on config
 ### Prerequisites
 - Python 3.9+ with pip and venv module
 - `mpremote` and `mpr` tools (installed via requirements.txt)
+- `picotool` for factory reset (installed via install_dev_deps.sh)
 - MicroPython firmware on Pico W
 - Physical hardware setup (see `docs/assembly.md`)
 
@@ -37,6 +38,12 @@ source ./scripts/activate_venv.sh
 
 # Install MicroPython dependencies on the device
 ./scripts/install_pico_deps.sh
+
+# Install picotool separately (also done by install_dev_deps.sh)
+./scripts/install_picotools.sh
+
+# Install udev rules to use picotool without sudo (Linux only)
+sudo ./scripts/install_picotool_udev_rules.sh
 ```
 
 ### Project Structure
@@ -62,6 +69,7 @@ irrigation-mp-hass-mqtt/
 ├── docs/                  # Documentation
 ├── typings/               # MicroPython type stubs
 ├── config.template.json   # Configuration template
+├── opencode.json          # OpenCode MCP configuration
 └── requirements.txt       # Python dependencies
 ```
 
@@ -131,23 +139,162 @@ irrigation-mp-hass-mqtt/
 
 ## Testing
 
-### Hardware Tests
-Located in `src/hardware_tests/`:
-- `sensor_test.py`: Test MOSFET switches and ADS1115 sensor readings
-- `valve_test.py`: Test relay valve controls
+This project includes a comprehensive testing framework that allows **Test-Driven Development (TDD)** on your development machine using mocked hardware modules. Tests run in actual MicroPython interpreter.
 
-**Usage**:
+### Test-Driven Development (TDD) Approach
+
+1. **Write test first**: Create test for new functionality before implementation
+2. **Run test**: Verify it fails (red)
+3. **Implement**: Write minimal code to make test pass
+4. **Refactor**: Clean up code while keeping tests green
+5. **Repeat**: Add more tests for edge cases and new features
+
+### Running Tests
+
+#### Setup MicroPython Runtime (first time)
+```bash
+./scripts/setup_micropython_test_env.sh
+```
+
+#### Run All Tests
+```bash
+python3 tests/run_tests.py
+```
+
+#### Run Individual Tests
+```bash
+# Run specific test file
+./micropython-local tests/unit/test_rolling_average.py
+
+# Run test with CPython (for debugging)
+python3 tests/unit/test_valve.py
+```
+
+#### Hardware Tests (on actual device)
 ```bash
 mpremote run src/hardware_tests/sensor_test.py
 mpremote run src/hardware_tests/valve_test.py
 ```
 
-### Software Testing
-- No formal unit test framework due to MicroPython constraints
-- Test by running on actual hardware
-- Use `mpremote` for rapid iteration
+### Writing Tests
 
-### Validation Steps
+#### 1. Test Hardware-Free Modules
+Start with modules that don't need hardware mocks:
+```python
+# tests/unit/test_example.py
+import sys
+sys.path.insert(0, "src")
+from example import Example
+
+def test_example() -> bool:
+    example = Example()
+    result = example.calculate()
+    if result == expected:
+        print("✅ Test passed")
+        return True
+    else:
+        print(f"❌ Expected {expected}, got {result}")
+        return False
+```
+
+#### 2. Test Hardware-Dependent Modules
+Use simple mocks from `tests/simple_mocks.py`:
+```python
+# tests/unit/test_hardware.py
+import sys
+sys.path.insert(0, "tests")
+from simple_mocks import MockPin, mock_machine, mock_os
+
+# Create mock modules before importing hardware-dependent code
+class MachineModule:
+    Pin = mock_machine.Pin
+    unique_id = mock_machine.unique_id
+
+sys.modules['machine'] = MachineModule()
+sys.modules['os'] = mock_os
+
+# Now import and test
+from hardware_module import HardwareClass
+
+def test_hardware() -> bool:
+    hardware = HardwareClass()
+    hardware.do_something()
+    
+    # Assert mock state
+    if mock_machine.pins_created[0]._value == 1:
+        print("✅ Hardware test passed")
+        return True
+    else:
+        print("❌ Hardware test failed")
+        return False
+```
+
+#### 3. Mock Design Principles
+- **Keep it simple**: Mock only what's needed for the test
+- **Track state**: Use attributes like `_value`, `calls` for assertions
+- **Incremental**: Add mock functionality as tests need it
+- **Test mocks first**: Write unit tests for mocks before using them
+
+### Test Framework Components
+
+1. **Test Runner** (`tests/run_tests.py`):
+   - Discovers and runs all test files
+   - Runs tests in MicroPython interpreter
+   - Provides clear pass/fail output with ✅/❌ indicators
+
+2. **Simple Mocks** (`tests/simple_mocks.py`):
+   - Minimal mock classes for hardware modules (`machine`, `os`, `datetime`, `time`, `ntptime`)
+   - Tracks state for assertions
+   - Easy to extend for new tests
+
+3. **Test Files** (`tests/unit/*.py`):
+   - Self-contained test scripts
+   - Print results with ✅/❌ indicators
+   - Can run standalone in MicroPython
+
+### Current Test Coverage
+
+#### ✅ Test Framework
+
+All test files use MicroPython's unittest framework:
+
+- `test_config.py`: Configuration parsing and validation
+- `test_logger.py`: Logging utilities with file I/O mocking
+- `test_rolling_average.py`: Rolling average and EMA calculations
+- `test_valve.py`: Valve control with mocked `machine.Pin`
+- `test_sensor.py`: Soil moisture sensor with ADS1115 mock
+- `test_irrigation_point.py`: Complete irrigation point logic
+- `test_irrigation_station.py`: Station management with multiple points
+- `test_time_keeper.py`: Time synchronization and scheduling
+- `test_watchdog.py`: System watchdog with timer mocking
+
+### unittest Framework Support
+
+The project uses **MicroPython's unittest framework** exclusively. The `setup_micropython_test_env.sh` script automatically installs it.
+
+**Example unittest test:**
+```python
+import sys
+sys.path.insert(0, "src")
+import unittest
+
+from rolling_average import RollingAverage
+
+class TestRollingAverage(unittest.TestCase):
+    def test_basic_average(self) -> None:
+        ra = RollingAverage(window_size=3)
+        ra.add_reading(10)
+        ra.add_reading(20)
+        ra.add_reading(30)
+        self.assertAlmostEqual(ra.get_average(), 15.6, places=3)
+
+if __name__ == "__main__":
+    unittest.main()
+```
+
+The test runner (`tests/run_tests.py`) runs all tests in the MicroPython interpreter.
+
+### Validation Steps (Hardware)
 1. Run hardware tests to verify connections
 2. Deploy config and certificates
 3. Monitor serial output for errors
@@ -156,13 +303,17 @@ mpremote run src/hardware_tests/valve_test.py
 ## Development Workflow
 
 ### Local Development
-1. **Edit code** in `src/`
-2. **Run type checking** (optional): `pyright src/`
-3. **Deploy to device**: `./scripts/run_on_device.sh`
+1. **Write test first** (TDD approach): Create test in `tests/unit/`
+2. **Run test**: Verify it fails (red phase)
+3. **Implement feature**: Write minimal code in `src/` to make test pass
+4. **Run tests again**: Verify all tests pass (green phase)
+5. **Run type checking** (optional): `pyright src/`
+6. **Refactor**: Clean up code while keeping tests green
+7. **Deploy to device** (optional): `./scripts/run_on_device.sh`
    - Copies `src/`, `config.json`, and `certs/` to Pico
    - Reboots device
    - Opens serial monitor
-4. **Monitor output** via serial connection
+8. **Monitor output** via serial connection
 
 ### Common Commands
 ```bash
@@ -172,6 +323,12 @@ mpremote run src/hardware_tests/valve_test.py
 
 # Activate virtual environment for development
 source ./scripts/activate_venv.sh
+
+# Setup MicroPython for testing (first time)
+./scripts/setup_micropython_test_env.sh
+
+# Run tests
+python3 tests/run_tests.py
 
 # Deploy and run
 ./scripts/run_on_device.sh
@@ -191,12 +348,50 @@ mpremote
 - Type stubs in `typings/` (includes micropython-rp2-pico_w-stubs)
 - Run: `pyright src/` (may have false positives due to MicroPython)
 
+### LSP Diagnostics via Neovim MCP
+The project uses OpenCode's MCP (Model Context Protocol) integration with neovim to access LSP diagnostics directly. This enables AI agents to view real-time code analysis results.
+
+**Configuration:**
+- `opencode.json` enables `neovim_*` tools and permissions
+- Uses global neovim MCP server configuration from `~/.config/opencode/opencode.json`
+- Requires `NVIM_SOCKET_PATH` environment variable to be set
+
+**Accessing LSP Information:**
+```bash
+# View current LSP clients and diagnostics
+:lua print(vim.inspect(vim.lsp.get_active_clients()))
+:lua print(vim.inspect(vim.diagnostic.get(bufnr)))
+```
+
+**Common LSP Servers in this project:**
+- `pyright`: Python type checking and error detection
+- `ruff`: Python linting, formatting, and code fixes
+- `bashls`: Bash shell script analysis
+- `jsonls`: JSON validation and formatting
+
+**Best Practices for AI Agents:**
+1. Always check LSP diagnostics before and after code changes
+2. Address Pyright type errors first (most critical)
+3. Fix Ruff linting issues (code quality)
+4. Remove unused imports flagged by both Pyright and Ruff
+5. Use neovim MCP to view specific buffer diagnostics
+
+**Example workflow:**
+```lua
+-- Get current buffer number
+:echo bufnr()
+
+-- Get diagnostics for current buffer
+:lua print(vim.inspect(vim.diagnostic.get(12)))
+```
+
 ## Deployment
 
 ### Production Deployment
 1. Ensure `config.json` and TLS certificates are in `certs/` directory
-2. Run `./scripts/run_on_device.sh` to deploy
-3. Device automatically starts main loop on boot
+2. Install MicroPython dependencies on the device: `./scripts/install_pico_deps.sh` (required after factory reset)
+3. Deploy code: `./scripts/run_on_device.sh`
+4. Device automatically starts main loop on boot
 
 ### Certificates
 The MQTT connection requires TLS certificates in DER format:
@@ -212,6 +407,14 @@ Use `./scripts/factory_reset.sh` to clear device filesystem and reinstall MicroP
 2. Downloads the latest MicroPython firmware for Raspberry Pi Pico W
 3. Loads the firmware onto the device
 4. Removes the downloaded firmware file
+
+**After factory reset**, the device will reboot into normal mode. You must then:
+1. Install MicroPython dependencies: `./scripts/install_pico_deps.sh`
+2. Deploy your code: `./scripts/run_on_device.sh`
+
+**Note**: `picotool` is automatically installed when you run `./scripts/install_dev_deps.sh`. The installation script downloads a pre-built binary for your OS and architecture. You can also install it directly with `./scripts/install_picotools.sh`. If you need to install it manually, follow the instructions in the script or visit the [picotool repository](https://github.com/raspberrypi/picotool).
+
+**Permission Note**: On Linux, you may need to install udev rules to use picotool without sudo. Run `sudo ./scripts/install_picotool_udev_rules.sh` after installing picotool.
 
 ### Version Management
 1. Update version in `config.template.json` (if version field added)
@@ -237,17 +440,21 @@ Use `./scripts/factory_reset.sh` to clear device filesystem and reinstall MicroP
 ## Common Tasks for AI Agents
 
 ### Adding New Features
-1. Understand hardware constraints (memory, timing)
-2. Follow existing patterns in similar modules
-3. Add type hints and docstrings
-4. Test on actual hardware
-5. Update documentation if needed
+1. **Write test first** (TDD): Create test in `tests/unit/` before implementation
+2. Understand hardware constraints (memory, timing)
+3. Follow existing patterns in similar modules
+4. Add type hints and docstrings
+5. **Run tests**: Verify tests pass with `python3 tests/run_tests.py`
+6. Test on actual hardware (optional, for validation)
+7. Update documentation if needed
 
 ### Debugging Issues
-1. **Check serial logs** via `mpremote`
-2. **Verify hardware connections** with test scripts
-3. **Review configuration** validity
-4. **Monitor MQTT traffic** (e.g., with `mosquitto_sub`)
+1. **Run tests**: Check if tests pass with `python3 tests/run_tests.py`
+2. **Check serial logs** via `mpremote`
+3. **Verify hardware connections** with test scripts
+4. **Review configuration** validity
+5. **Monitor MQTT traffic** (e.g., with `mosquitto_sub`)
+6. **Check LSP diagnostics** via neovim MCP for code errors and type issues
 
 ### Performance Optimization
 - Minimize memory allocations in loops
@@ -304,5 +511,5 @@ Follow conventional commits:
 
 ---
 
-*Last updated: March 2025*
+*Last updated: March 2026*
 *Maintainer: Project maintainers*

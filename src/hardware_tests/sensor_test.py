@@ -70,7 +70,7 @@ def main() -> None:
     else:
         # This is meant to help figuring out how the MOSFET pins and sensor ADS/Channels
         # are mapped to terminals.
-        print(f"Running test for all sensors and all MOSFET pins")
+        print("Running test for all sensors and all MOSFET pins")
 
         # Make sure all are off initially
         for mosfet_pin in mosfet_pin_objects:

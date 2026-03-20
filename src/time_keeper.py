@@ -1,23 +1,27 @@
 import ntptime
-from machine import RTC, Timer, reset
+from machine import RTC, reset
 import datetime
-from time import sleep
+from time import sleep, time
 from logger import Logger
 
 INITIAL_RETRY_DELAY = 2
 MAX_INITIAL_RETRY_TIME = 30
+NORMAL_SYNC_INTERVAL = 7200  # 2 hours in seconds
 
 
 class TimeKeeper:
     def __init__(
-        self, logger: Logger, sync_interval: int = 7200, retry_interval: int = 60
+        self, logger: Logger, sync_interval: int = 30, retry_interval: int = 60
     ) -> None:
         self._rtc: RTC = RTC()
-        self._sync_timer: Timer = Timer(-1)
-        self._sync_interval_ms: int = sync_interval * 1000  # Already in milliseconds
-        self._retry_interval_ms: int = retry_interval * 1000
+        self._check_interval: int = (
+            sync_interval  # Check frequency (unused, scheduler controls)
+        )
+        self._retry_interval: int = (
+            retry_interval  # Retry interval (unused, scheduler controls)
+        )
         self._logger: Logger = logger
-        self._pending_ntp_sync = False
+        self._last_successful_ntp_sync: float = 0.0  # Track last successful sync time
         ntptime.host = "nl.pool.ntp.org"
 
     def initialize_ntp_synchronization(self) -> None:
@@ -28,6 +32,7 @@ class TimeKeeper:
         while not synced and retry_time <= MAX_INITIAL_RETRY_TIME:
             try:
                 ntptime.settime()
+                self._last_successful_ntp_sync = time()
                 self._logger.log("Initial NTP sync successful")
                 synced = True
             except Exception:
@@ -39,38 +44,27 @@ class TimeKeeper:
             self._logger.log("Failed to sync NTP, resetting")
             reset()
 
-        self._schedule_normal_sync()
+    def sync_time(self) -> bool:
+        """Attempt to sync time with NTP server."""
+        # Skip if last successful sync was less than 2 hours ago
+        if (
+            self._last_successful_ntp_sync > 0
+            and time() - self._last_successful_ntp_sync < NORMAL_SYNC_INTERVAL
+        ):
+            elapsed = int(time() - self._last_successful_ntp_sync)
+            self._logger.log(
+                f"NTP sync skipped, last sync {elapsed}s ago (< {NORMAL_SYNC_INTERVAL}s)"
+            )
+            return True  # Return True to indicate task was "executed" (skipped intentionally)
 
-    def _schedule_normal_sync(self) -> None:
-        self._sync_timer.init(
-            period=self._sync_interval_ms,
-            mode=Timer.ONE_SHOT,
-            callback=self._set_pending_ntp_sync,
-        )
-
-    def _schedule_retry(self) -> None:
-        self._sync_timer.init(
-            period=self._retry_interval_ms,
-            mode=Timer.ONE_SHOT,
-            callback=self._set_pending_ntp_sync,
-        )
-
-    def _set_pending_ntp_sync(self, _=None) -> None:
-        self._pending_ntp_sync = True
-
-    def handle_pending_ntp_sync(self) -> None:
-        if not self._pending_ntp_sync:
-            return
         try:
             ntptime.settime()
+            self._last_successful_ntp_sync = time()
             self._logger.log("NTP sync successful")
-            self._schedule_normal_sync()
+            return True
         except OSError:
-            self._logger.log(
-                f"NTP sync failed retrying again in {self._retry_interval_ms // 1000}s"
-            )
-            self._schedule_retry()
-        self._pending_ntp_sync = False
+            self._logger.log("NTP sync failed")
+            return False
 
     def get_current_cet_datetime_str(self) -> str:
         """Return formatted CET string"""
