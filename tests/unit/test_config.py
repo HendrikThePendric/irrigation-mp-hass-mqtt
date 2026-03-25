@@ -183,6 +183,7 @@ class TestConfig(unittest.TestCase):
         self.assertEqual(config.rolling_window, 3)
         self.assertAlmostEqual(config.ema_alpha, 0.2)
         self.assertEqual(config.publish_interval, 5 * 60)  # 5 minutes in seconds
+        self.assertEqual(config.max_valve_open_time, 45 * 60)  # 45 minutes in seconds
 
         # Check irrigation points
         self.assertEqual(len(config.irrigation_points), 2)

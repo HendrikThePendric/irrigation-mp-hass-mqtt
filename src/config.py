@@ -60,6 +60,14 @@ def _get_publish_interval(conf: dict) -> int:
     return publish_interval_minutes * 60
 
 
+def _get_max_valve_open_time(conf: dict) -> int:
+    """Extract and convert max_valve_open_time_minutes to seconds."""
+    max_valve_open_time_minutes: int = _get_if_valid(
+        "max_valve_open_time_minutes", conf, int
+    )
+    return max_valve_open_time_minutes * 60
+
+
 def _parse_ads_channel(conf: dict) -> int:
     """Fetch and validate ADS1115 channel index."""
     channel: int = _get_if_valid("ads_channel", conf, int)
@@ -122,6 +130,13 @@ class Config:
                 f"publish_interval must be > 0, got {self.publish_interval}"
             )
 
+        # Maximum valve open time in minutes, converted to seconds
+        self.max_valve_open_time: int = _get_max_valve_open_time(conf)
+        if self.max_valve_open_time <= 0:
+            raise ValueError(
+                f"max_valve_open_time must be > 0, got {self.max_valve_open_time}"
+            )
+
         # Measurement interval in seconds (publish_interval // rolling_window)
         self.measurement_interval: int = self.publish_interval // self.rolling_window
         if self.measurement_interval <= 0:
@@ -150,6 +165,7 @@ class Config:
             f"rolling_window:   {self.rolling_window}",
             f"ema_alpha:        {self.ema_alpha}",
             f"publish_interval: {self.publish_interval} seconds",
+            f"max_valve_open_time: {self.max_valve_open_time} seconds",
             f"measurement_interval: {self.measurement_interval} seconds",
             "irrigation_points:",
         ]

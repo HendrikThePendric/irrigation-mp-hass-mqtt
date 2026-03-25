@@ -27,12 +27,77 @@ class MachineModule:
     reset = lambda: None
 
 
+class MockOpenValvePersister:
+    """Mock open valve persister for testing."""
+
+    _instance = None
+    MAX_RECOVERY_ATTEMPTS = 3
+
+    def __init__(self, config, logger) -> None:
+        self._logger = logger
+        self.data = None  # dict with point_id, opened_timestamp, recovery_count or None
+        self.set_calls = []  # list of point_id strings
+        self.clear_calls = []  # list of empty tuples
+        self.increment_calls = []  # list of empty tuples
+        self.__class__._instance = self
+
+    @classmethod
+    def get_instance(cls):
+        return cls._instance
+
+    @classmethod
+    def reset(cls):
+        cls._instance = None
+
+    def get(self) -> ValveState | None:
+        if self.data is None:
+            return None
+        point_id = self.data["point_id"]
+        opened_timestamp = self.data["opened_timestamp"]
+        recovery_count = self.data.get("recovery_count", 0)
+
+        # Simulate recovery count check
+        if recovery_count >= self.MAX_RECOVERY_ATTEMPTS:
+            self.data = None
+            return None
+
+        # DO NOT increment recovery count here anymore
+        return ValveState(point_id, "open")
+
+    def increment_opened_valve_recovery_count(self) -> None:
+        self.increment_calls.append(())
+        if self.data is None:
+            return
+        recovery_count = self.data.get("recovery_count", 0)
+        self.data["recovery_count"] = recovery_count + 1
+
+    def set(self, point_id: str) -> None:
+        from simple_mocks import mock_time
+
+        self.data = {
+            "point_id": point_id,
+            "opened_timestamp": mock_time.time(),
+            "recovery_count": 0,
+        }
+        self.set_calls.append(point_id)
+
+    def clear(self) -> None:
+        self.data = None
+        self.clear_calls.append(())
+
+
+# Mock open_valve_persister module
+class MockOpenValvePersisterModule:
+    OpenValvePersister = MockOpenValvePersister
+
+
 # Add all mock modules to sys.modules
 sys.modules["machine"] = MachineModule()
 sys.modules["os"] = mock_os
 sys.modules["ntptime"] = mock_ntptime
 sys.modules["time"] = mock_time
 sys.modules["ads1x15"] = mock_ads1x15
+sys.modules["open_valve_persister"] = MockOpenValvePersisterModule()
 
 # Now import the modules to test
 from irrigation_station import IrrigationStation  # type: ignore
@@ -51,6 +116,7 @@ class MockConfig:
         self.ema_alpha = 0.2
         self.publish_interval = 300  # 5 minutes in seconds
         self.measurement_interval = 100  # 100 seconds
+        self.max_valve_open_time = 45 * 60  # 45 minutes in seconds
 
     def add_point(self, point_id: str, point_config) -> None:
         self.irrigation_points[point_id] = point_config
@@ -123,6 +189,15 @@ class MockLogger:
 class TestIrrigationStationNew(unittest.TestCase):
     """Test IrrigationStation class with new API."""
 
+    def setUp(self) -> None:
+        """Reset mock state before each test."""
+        MockOpenValvePersister.reset()
+        # Also reset mock time if needed
+        from simple_mocks import mock_time
+
+        mock_time.reset_time()
+        mock_time.reset_ticks()
+
     def test_irrigation_station_initialization(self) -> None:
         """Test irrigation station initialization."""
         config = MockConfig()
@@ -133,7 +208,8 @@ class TestIrrigationStationNew(unittest.TestCase):
         config.add_point("testpoint", point_config)
 
         # Create irrigation station
-        station = IrrigationStation(config, logger)  # type: ignore
+        persister = MockOpenValvePersister(config, logger)
+        station = IrrigationStation(config, logger, persister)
 
         # Check that irrigation points dictionary was created
         self.assertIsNotNone(station._points)
@@ -149,7 +225,8 @@ class TestIrrigationStationNew(unittest.TestCase):
         config.add_point("testpoint", point_config)
 
         # Create irrigation station with mocked point
-        station = IrrigationStation(config, logger)  # type: ignore
+        persister = MockOpenValvePersister(config, logger)
+        station = IrrigationStation(config, logger, persister)
         # Replace the point with a mock
         mock_point = MockIrrigationPoint("testpoint")
         station._points["testpoint"] = mock_point
@@ -176,7 +253,8 @@ class TestIrrigationStationNew(unittest.TestCase):
         config.add_point("testpoint", point_config)
 
         # Create irrigation station with mocked point
-        station = IrrigationStation(config, logger)  # type: ignore
+        persister = MockOpenValvePersister(config, logger)
+        station = IrrigationStation(config, logger, persister)
         # Replace the point with a mock
         mock_point = MockIrrigationPoint("testpoint")
         mock_point.sensor_value = 0.75
@@ -209,7 +287,8 @@ class TestIrrigationStationNew(unittest.TestCase):
         config.add_point("testpoint2", point_config2)
 
         # Create irrigation station with mocked points
-        station = IrrigationStation(config, logger)  # type: ignore
+        persister = MockOpenValvePersister(config, logger)
+        station = IrrigationStation(config, logger, persister)
         # Replace points with mocks
         mock_point1 = MockIrrigationPoint("testpoint1")
         mock_point1.sensor_value = 0.6
@@ -226,6 +305,113 @@ class TestIrrigationStationNew(unittest.TestCase):
         values = {state.point_id: state.moisture for state in sensor_states}
         self.assertEqual(values["testpoint1"], 0.6)
         self.assertEqual(values["testpoint2"], 0.4)
+
+    def test_valve_persistence_integration(self) -> None:
+        """Test that valve state is persisted on open/close."""
+        config = MockConfig()
+        logger = MockLogger()
+
+        # Add two points
+        point_config_a = MockPointConfig("Point A", 2, 21, 0x48, 0)
+        point_config_b = MockPointConfig("Point B", 3, 22, 0x49, 1)
+        config.add_point("pointa", point_config_a)
+        config.add_point("pointb", point_config_b)
+
+        # Create station with mock persister
+        persister = MockOpenValvePersister(config, logger)
+        station = IrrigationStation(config, logger, persister)
+
+        # Replace points with mocks
+        mock_point_a = MockIrrigationPoint("pointa")
+        mock_point_b = MockIrrigationPoint("pointb")
+        station._points["pointa"] = mock_point_a
+        station._points["pointb"] = mock_point_b
+
+        # Open valve A via process_instructions
+        instructions = [ValveState("pointa", "open")]
+        _ = station.process_instructions(instructions)
+
+        # Verify valve opened and persister written
+        self.assertEqual(mock_point_a.valve_state, "open")
+        self.assertEqual(mock_point_a.open_count, 1)
+        self.assertEqual(len(persister.set_calls), 1)
+        self.assertEqual(persister.set_calls[0], "pointa")
+
+        # Close valve A by opening valve B
+        instructions = [ValveState("pointb", "open")]
+        _ = station.process_instructions(instructions)
+
+        # Verify valve A closed, valve B opened, persister updated
+        self.assertEqual(mock_point_a.valve_state, "closed")
+        self.assertEqual(mock_point_a.close_count, 1)
+        self.assertEqual(mock_point_b.valve_state, "open")
+        self.assertEqual(mock_point_b.open_count, 1)
+        self.assertEqual(len(persister.set_calls), 2)
+        self.assertEqual(persister.set_calls[1], "pointb")
+        self.assertEqual(len(persister.clear_calls), 1)
+
+        # Close valve B via CLOSED command
+        instructions = [ValveState("pointb", "closed")]
+        _ = station.process_instructions(instructions)
+
+        # Verify valve B closed and persister deleted
+        self.assertEqual(mock_point_b.valve_state, "closed")
+        self.assertEqual(mock_point_b.close_count, 1)
+        self.assertEqual(len(persister.clear_calls), 2)
+
+    def test_recovery_count_limit(self) -> None:
+        """Test that recovery count limits valve restoration after reboots."""
+        config = MockConfig()
+        logger = MockLogger()
+        persister = MockOpenValvePersister(config, logger)
+
+        # Simulate valve opened
+        persister.set("pointa")
+        self.assertIsNotNone(persister.data)
+        self.assertEqual(persister.data["recovery_count"], 0)
+
+        # First restoration (reboot 1) - should succeed
+        state1 = persister.get()
+        self.assertIsNotNone(state1)
+        self.assertEqual(state1.point_id, "pointa")
+        # recovery_count still 0 (not incremented yet)
+        self.assertEqual(persister.data["recovery_count"], 0)
+        persister.increment_opened_valve_recovery_count()
+        self.assertEqual(persister.data["recovery_count"], 1)
+        self.assertEqual(len(persister.increment_calls), 1)
+
+        # Second restoration (reboot 2) - should succeed
+        state2 = persister.get()
+        self.assertIsNotNone(state2)
+        self.assertEqual(persister.data["recovery_count"], 1)
+        persister.increment_opened_valve_recovery_count()
+        self.assertEqual(persister.data["recovery_count"], 2)
+
+        # Third restoration (reboot 3) - should succeed
+        state3 = persister.get()
+        self.assertIsNotNone(state3)
+        self.assertEqual(persister.data["recovery_count"], 2)
+        persister.increment_opened_valve_recovery_count()
+        self.assertEqual(persister.data["recovery_count"], 3)
+
+        # Fourth restoration (reboot 4) - should FAIL (exceeds MAX_RECOVERY_ATTEMPTS=3)
+        state4 = persister.get()
+        self.assertIsNone(state4)
+        # File should be deleted (data set to None) because recovery_count >= limit
+        self.assertIsNone(persister.data)
+
+        # After clear (valve closed properly), count resets
+        persister.set("pointa")
+        self.assertEqual(persister.data["recovery_count"], 0)
+
+        # Missing recovery_count field (backward compatibility)
+        persister.data = {"point_id": "pointb", "opened_timestamp": 123456}
+        state = persister.get()
+        self.assertIsNotNone(state)
+        # recovery_count still missing/0 (not incremented yet)
+        self.assertEqual(persister.data.get("recovery_count", 0), 0)
+        persister.increment_opened_valve_recovery_count()
+        self.assertEqual(persister.data.get("recovery_count", 0), 1)
 
 
 class TestIrrigationStationProcessInstructionsComprehensive(unittest.TestCase):
@@ -249,7 +435,8 @@ class TestIrrigationStationProcessInstructionsComprehensive(unittest.TestCase):
         self.config.add_point("C", point_config_c)
 
         # Create irrigation station
-        self.station = IrrigationStation(self.config, self.logger)  # type: ignore
+        self.persister = MockOpenValvePersister(self.config, self.logger)
+        self.station = IrrigationStation(self.config, self.logger, self.persister)
 
         # Replace points with enhanced mocks
         self.point_a = MockIrrigationPoint("A")

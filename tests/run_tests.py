@@ -53,6 +53,14 @@ def main() -> None:
     """Run all tests."""
     print("=== MicroPython Test Runner ===")
 
+    # Clean up any leftover valve state file from previous test runs
+    valve_state_file = "valve_state.json"
+    if os.path.exists(valve_state_file):
+        try:
+            os.remove(valve_state_file)
+        except OSError:
+            pass  # Ignore errors
+
     # Check if MicroPython is available
     micropython_bin = "./micropython-local"
     if not os.path.exists(micropython_bin):
@@ -85,6 +93,13 @@ def main() -> None:
         else:
             failed += 1
         print()
+
+    # Clean up valve state file that might have been created during tests
+    if os.path.exists(valve_state_file):
+        try:
+            os.remove(valve_state_file)
+        except OSError:
+            pass
 
     # Summary
     print("=" * 40)

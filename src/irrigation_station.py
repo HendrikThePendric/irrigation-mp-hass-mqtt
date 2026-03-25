@@ -5,18 +5,24 @@ from irrigation_point import IrrigationPoint
 from valve import Valve
 from logger import Logger
 from irrigation_states import ValveState, SensorState
+from open_valve_persister import OpenValvePersister
 import time
 
 
 class IrrigationStation:
-    MAX_VALVE_OPEN_TIME = 45 * 60  # 45 minutes
     """Manages multiple irrigation points and their shared resources."""
 
-    def __init__(self, config: Config, logger: Logger) -> None:
+    def __init__(
+        self,
+        config: Config,
+        logger: Logger,
+        persister: OpenValvePersister,
+    ) -> None:
         """Initialize the irrigation station with all configured points."""
         self._config = config
         self._points: dict[str, IrrigationPoint] = {}
         self._logger = logger
+        self._persister = persister
         # Valve auto-close tracking
         self._last_valve_open_time: float | None = None
         # Initialize I2C bus (shared for all ADS modules)
@@ -98,6 +104,7 @@ class IrrigationStation:
         ):
             self._points[current_open_point_id].close_valve()
             # Reset auto-close tracking (only one valve can be open at a time)
+            self._persister.clear()
             self._last_valve_open_time = None
             valve_states[current_open_point_id] = Valve.STATE_CLOSED
 
@@ -108,6 +115,7 @@ class IrrigationStation:
             self._points[last_command_opened_point_id].open_valve()
             # Update auto-close tracking
             self._last_valve_open_time = time.time()
+            self._persister.set(last_command_opened_point_id)
 
         for pid, state in valve_states.items():
             valve_updates.append(ValveState(pid, state))
@@ -157,9 +165,10 @@ class IrrigationStation:
             return None
 
         elapsed = time.time() - self._last_valve_open_time
-        if elapsed >= self.MAX_VALVE_OPEN_TIME:
+        if elapsed >= self._config.max_valve_open_time:
             self._points[open_point_id].close_valve()
             self._last_valve_open_time = None
+            self._persister.clear()
             self._logger.log(
                 f"[Auto-Close] {open_point_id}: Valve closed after {elapsed / 60:.1f} minutes"
             )

@@ -72,6 +72,64 @@ class MockGCModule:
     collect = mock_gc.collect
 
 
+# Mock open_valve_persister module
+class MockOpenValvePersister:
+    """Mock open valve persister for testing."""
+
+    MAX_RECOVERY_ATTEMPTS = 3
+
+    def __init__(self, config, logger):
+        self._logger = logger
+        self._data = (
+            None  # dict with point_id, opened_timestamp, recovery_count or None
+        )
+        self.set_calls = []  # list of point_id strings
+        self.clear_calls = []  # list of empty tuples
+        self.increment_calls = []  # list of empty tuples
+
+    def get(self) -> ValveState | None:
+        if self._data is None:
+            return None
+        point_id = self._data["point_id"]
+        opened_timestamp = self._data["opened_timestamp"]
+        recovery_count = self._data.get("recovery_count", 0)
+
+        # Simulate recovery count check
+        if recovery_count >= self.MAX_RECOVERY_ATTEMPTS:
+            self._data = None
+            return None
+
+        # DO NOT increment recovery count here anymore
+        from irrigation_states import ValveState
+
+        return ValveState(point_id, "open")
+
+    def increment_opened_valve_recovery_count(self) -> None:
+        self.increment_calls.append(())
+        if self._data is None:
+            return
+        recovery_count = self._data.get("recovery_count", 0)
+        self._data["recovery_count"] = recovery_count + 1
+
+    def set(self, point_id: str) -> None:
+        from simple_mocks import mock_time
+
+        self._data = {
+            "point_id": point_id,
+            "opened_timestamp": mock_time.time(),
+            "recovery_count": 0,
+        }
+        self.set_calls.append(point_id)
+
+    def clear(self) -> None:
+        self._data = None
+        self.clear_calls.append(())
+
+
+class MockOpenValvePersisterModule:
+    OpenValvePersister = MockOpenValvePersister
+
+
 # Add all mock modules to sys.modules
 sys.modules["machine"] = MachineModule()
 sys.modules["os"] = mock_os
@@ -84,14 +142,15 @@ sys.modules["umqtt.simple"] = mock_umqtt_simple
 sys.modules["network"] = MockNetworkModule()
 sys.modules["rp2"] = MockRP2Module()
 sys.modules["gc"] = MockGCModule()
+sys.modules["open_valve_persister"] = MockOpenValvePersisterModule()
 
 # Mock datetime module (used by time_keeper)
-import datetime as real_datetime
+import datetime as real_datetime  # noqa: E402
 
 sys.modules["datetime"] = real_datetime
 
 # Now we can import the modules we need for testing
-import unittest
+import unittest  # noqa: E402
 
 
 class TestIrrigationSystemE2E(unittest.TestCase):
@@ -138,6 +197,7 @@ class TestIrrigationSystemE2E(unittest.TestCase):
             "rolling_window": 3,
             "ema_alpha": 0.2,
             "publish_interval_minutes": 4,  # 4 minutes = 240 seconds
+            "max_valve_open_time_minutes": 45,
             "irrigation_points": [
                 {
                     "name": "Location A",

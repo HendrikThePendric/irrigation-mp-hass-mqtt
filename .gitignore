@@ -176,6 +176,7 @@ cython_debug/
 .pypirc
 config.json
 certs/
+valve_state.json
 .aider*
 
 log.txt

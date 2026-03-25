@@ -1,13 +1,14 @@
 from machine import Pin
-from time import sleep
 from mqtt_hass_manager import MqttHassManager
 from irrigation_station import IrrigationStation
+from open_valve_persister import OpenValvePersister
 from logger import Logger
 from task_scheduler import TaskScheduler
 from watchdog import Watchdog
 from config import Config
 from time_keeper import TimeKeeper
 from wifi_manager import WiFiManager
+from irrigation_states import ValveState
 import gc
 
 
@@ -32,7 +33,10 @@ class FirmwareController:
             mqtt_publish_interval=self._config.publish_interval,
         )
         self._mqtt_manager = MqttHassManager(self._config, self._logger)
-        self._station = IrrigationStation(self._config, self._logger)
+        self._open_valve_persister = OpenValvePersister(self._config, self._logger)
+        self._station = IrrigationStation(
+            self._config, self._logger, self._open_valve_persister
+        )
         self._wifi_manager = WiFiManager(self._config.network, self._logger)
         self._onboard_led = Pin("LED", Pin.OUT)
 
@@ -44,6 +48,13 @@ class FirmwareController:
             self._time_keeper.get_current_cet_datetime_str
         )
         self._mqtt_manager.setup()
+
+        # Restore persisted valve state and publish to Home Assistant
+        restored_valve_state: ValveState | None = self._open_valve_persister.get()
+        if restored_valve_state:
+            self._open_valve_persister.increment_opened_valve_recovery_count()
+            valve_updates = self._station.process_instructions([restored_valve_state])
+            self._mqtt_manager.publish_valve_states(valve_updates)
 
     def tick(self) -> None:
         """Execute one iteration of the main loop.

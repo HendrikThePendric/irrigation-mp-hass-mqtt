@@ -145,6 +145,7 @@ class MockMachine:
 
 # Mock os module
 class MockOS:
+    _files = {}
     """Mock os module."""
 
     # Essential attributes for unittest and standard library
