@@ -4,7 +4,7 @@ Persists the currently open valve to disk so state can be restored after restart
 """
 
 from json import dump, loads
-from os import remove
+from os import remove, sync
 import time
 from typing import Any, Dict
 
@@ -153,6 +153,7 @@ class OpenValvePersister:
         try:
             with open(self.FILE_PATH, "w") as f:
                 dump(data, f)
+            sync()
         except Exception as e:
             self._logger.log(
                 f"Failed to increment recovery count in valve state file: {e}"
@@ -164,15 +165,22 @@ class OpenValvePersister:
         Args:
             point_id: ID of open valve
         """
+        # Check existing file to preserve recovery_count for same valve
+        existing_data = self._read_file()
+        recovery_count = 0
+        if existing_data and existing_data.get("point_id") == point_id:
+            recovery_count = existing_data.get("recovery_count", 0)
+
         data = {
             "point_id": point_id,
             "opened_timestamp": time.time(),
-            "recovery_count": 0,
+            "recovery_count": recovery_count,
         }
 
         try:
             with open(self.FILE_PATH, "w") as f:
                 dump(data, f)
+            sync()
         except Exception as e:
             self._logger.log(f"Failed to write valve state file: {e}")
 

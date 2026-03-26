@@ -28,7 +28,7 @@ class Logger:
 
         with open(LOG_FILE_PATH, "a") as curr_file:
             curr_file.write(log_msg + "\n")
-            sync()
+        sync()
 
         self._rotate_file_if_needed()
 
@@ -59,7 +59,7 @@ class Logger:
                 msg = self._format_msg("Rotated log file")
                 with open(LOG_FILE_PATH, "a") as curr_file:
                     curr_file.write(msg + "\n")
-                    sync()
+                sync()
                 if self._should_print:
                     print(msg)
         except OSError as e:
