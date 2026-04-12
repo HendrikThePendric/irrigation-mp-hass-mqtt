@@ -8,66 +8,79 @@ The assembly steps contain checks to verify things are working as expected. Howe
 graph LR
     subgraph Power
         MAINS[220V AC] --> PSU[12V DC PSU]
-        PSU --> STEP[12V→5V USB stepdown]
+        PSU --> STEP["12V→5V USB stepdown"]
     end
 
-    subgraph Perfboard
-        STEP --> VBUS[5V rail]
-        GND[GND rail]
+    STEP --> VBUS[5V rail]
 
-        subgraph Pico W
-            P_VBUS[VBUS pin 40]
-            P_GND[GND pin 23]
-            P_3V3[3V3 OUT pin 36]
-            P_SDA[SDA GP0 pin 1]
-            P_SCL[SCL GP1 pin 2]
-            P_VALVE_GPIOS[Valve GPIOs]
-        end
-
-        P_VBUS --- VBUS
-        P_GND --- GND
-
-        subgraph Level Shifter
-            LV[LV 3.3V side]
-            HV[HV 5V side]
-        end
-
-        P_3V3 --- LV
-        VBUS --- HV
-        P_SDA --- LV
-        P_SCL --- LV
-
-        subgraph I2C Bus
-            ADS1["ADS1115-1 (0x48)"]
-            ADS2["ADS1115-2 (0x49)"]
-        end
-
-        HV --- ADS1
-        ADS1 --- ADS2
-
-        subgraph Sensor Terminals
-            T1[Terminal 1] --- ADS1
-            T2[Terminal 2] --- ADS1
-            T3[Terminal 3] --- ADS1
-            T4[Terminal 4] --- ADS1
-            T5[Terminal 5] --- ADS2
-            T6[Terminal 6] --- ADS2
-            T7[Terminal 7] --- ADS2
-            T8[Terminal 8] --- ADS2
-        end
-
-        VBUS --- Sensor Terminals
-        GND --- Sensor Terminals
-
-        subgraph Valve Relays
-            V1[Relay 1]
-            V2[Relay 2]
-            V3[Relay 3]
-            V4[Relay 4]
-        end
-
-        P_VALVE_GPIOS --- Valve Relays
+    subgraph Pico W
+        P_VBUS[VBUS pin 40]
+        P_GND[GND pin 23]
+        P_3V3[3V3 OUT pin 36]
+        P_SDA[SDA GP0 pin 1]
+        P_SCL[SCL GP1 pin 2]
+        P_VALVE_GPIOS[Valve GPIOs]
     end
+
+    P_VBUS --- VBUS
+    P_GND --- GND[GND rail]
+
+    subgraph Level Shifter
+        LV[LV 3.3V side]
+        HV[HV 5V side]
+    end
+
+    P_3V3 --- LV
+    VBUS --- HV
+    P_SDA --- LV
+    P_SCL --- LV
+
+    subgraph I2C Bus
+        ADS1["ADS1115-1 (0x48)"]
+        ADS2["ADS1115-2 (0x49)"]
+    end
+
+    HV --- ADS1
+    ADS1 --- ADS2
+
+    VBUS --- T1[Terminal 1]
+    VBUS --- T2[Terminal 2]
+    VBUS --- T3[Terminal 3]
+    VBUS --- T4[Terminal 4]
+    VBUS --- T5[Terminal 5]
+    VBUS --- T6[Terminal 6]
+    VBUS --- T7[Terminal 7]
+    VBUS --- T8[Terminal 8]
+
+    GND --- T1
+    GND --- T2
+    GND --- T3
+    GND --- T4
+    GND --- T5
+    GND --- T6
+    GND --- T7
+    GND --- T8
+
+    T1 --- ADS1
+    T2 --- ADS1
+    T3 --- ADS1
+    T4 --- ADS1
+    T5 --- ADS2
+    T6 --- ADS2
+    T7 --- ADS2
+    T8 --- ADS2
+
+    subgraph Valve Relays
+        V1[Relay 1]
+        V2[Relay 2]
+        V3[Relay 3]
+        V4[Relay 4]
+    end
+
+    P_VALVE_GPIOS --- V1
+    P_VALVE_GPIOS --- V2
+    P_VALVE_GPIOS --- V3
+    P_VALVE_GPIOS --- V4
 ```
 
 ## The perfboard
