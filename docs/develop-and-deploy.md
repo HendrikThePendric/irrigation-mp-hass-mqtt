@@ -79,7 +79,7 @@ Requirements before deploying:
 mpremote cp src/main.py :
 
 # Run a script without deploying
-mpremote run src/hardware_tests/sensor_test.py
+mpremote run diagnostics/check_sensors.py
 ```
 
 ## TLS certificates

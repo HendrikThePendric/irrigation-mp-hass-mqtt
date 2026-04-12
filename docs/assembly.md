@@ -105,7 +105,7 @@ For each sensor terminal:
 3. Connect the terminal GND pin to the GND rail
 4. Connect the terminal AOUT pin to one of the ADS1115's A0-3 input pins via a jump wire
 
-To test, connect a sensor to a terminal and run `src/hardware_tests/sensor_test.py`. The ADS1115 channel corresponding to that terminal should show a voltage (typically 2-3V for a dry sensor, dropping to ~1V when submerged in water). All other channels should read ~4.5V (floating high).
+To test, connect a sensor to a terminal and run `diagnostics/check_sensors.py`. The ADS1115 channel corresponding to that terminal should show a voltage (typically 2-3V for a dry sensor, dropping to ~1V when submerged in water). All other channels should read ~4.5V (floating high).
 
 ### Valve relays
 
@@ -137,4 +137,4 @@ graph LR
 | Right-3  | 4        |
 | Right-4  | 5        |
 
-To test, run `src/hardware_tests/valve_test.py`. The script cycles through each relay channel with a 40-second pause, so you can verify which terminal activates for each GPIO pin. Use this to populate the mapping table in your `config.json`.
+To test, run `diagnostics/check_valves.py`. The script cycles through each relay channel with a 40-second pause, so you can verify which terminal activates for each GPIO pin. Use this to populate the mapping table in your `config.json`.

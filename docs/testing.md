@@ -143,13 +143,13 @@ Global pre-built instances are available at the bottom of the file (`mock_machin
 |-----------|---------------|
 | `test_firmware_controller.py` | End-to-end firmware controller flow |
 
-### Hardware tests (`src/hardware_tests/`)
+### Hardware diagnostics (`diagnostics/`)
 
 These run on the actual Pico device, not in the test runner:
 
 ```bash
-mpremote run src/hardware_tests/sensor_test.py
-mpremote run src/hardware_tests/valve_test.py
+mpremote run diagnostics/check_sensors.py
+mpremote run diagnostics/check_valves.py
 ```
 
-See `src/hardware_tests/README.md` for terminal-to-GPIO/ADS mapping tables.
+See `diagnostics/README.md` for terminal-to-GPIO/ADS mapping tables.

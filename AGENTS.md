@@ -63,8 +63,8 @@ irrigation-mp-hass-mqtt/
 │   ├── time_keeper.py     # NTP time synchronization
 │   ├── watchdog.py        # System watchdog
 │   ├── logger.py          # Logging utilities
-│   ├── rolling_average.py # Signal smoothing algorithms
-│   └── hardware_tests/    # Hardware validation scripts
+│   └── rolling_average.py # Signal smoothing algorithms
+├── diagnostics/           # Hardware wiring verification scripts (run on device)
 ├── scripts/               # Development and deployment scripts
 ├── docs/                  # Documentation
 ├── typings/               # MicroPython type stubs
@@ -170,10 +170,10 @@ python3 tests/run_tests.py
 python3 tests/unit/test_valve.py
 ```
 
-#### Hardware Tests (on actual device)
+#### Hardware Diagnostics (on actual device)
 ```bash
-mpremote run src/hardware_tests/sensor_test.py
-mpremote run src/hardware_tests/valve_test.py
+mpremote run diagnostics/check_sensors.py
+mpremote run diagnostics/check_valves.py
 ```
 
 ### Writing Tests
@@ -295,7 +295,7 @@ if __name__ == "__main__":
 The test runner (`tests/run_tests.py`) runs all tests in the MicroPython interpreter.
 
 ### Validation Steps (Hardware)
-1. Run hardware tests to verify connections
+1. Run diagnostic scripts to verify connections
 2. Deploy config and certificates
 3. Monitor serial output for errors
 4. Check Home Assistant MQTT discovery
@@ -336,8 +336,8 @@ python3 tests/run_tests.py
 # Manual file transfer
 mpremote cp src/main.py :
 
-# Run single script
-mpremote run src/hardware_tests/sensor_test.py
+# Run a diagnostic script on the device
+mpremote run diagnostics/check_sensors.py
 
 # Serial monitor
 mpremote
@@ -475,7 +475,7 @@ Use `./scripts/factory_reset.sh` to clear device filesystem and reinstall MicroP
 |---------|---------------|----------|
 | No WiFi connection | Wrong SSID/password | Check `config.json` |
 | MQTT connection failed | TLS certs missing | Ensure `certs/` files exist |
-| Sensor readings erratic | Loose connections | Run hardware tests |
+| Sensor readings erratic | Loose connections | Run diagnostic scripts |
 | Memory allocation errors | Memory leak | Add `gc.collect()` |
 
 ### Logging
