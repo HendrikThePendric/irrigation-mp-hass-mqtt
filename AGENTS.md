@@ -8,7 +8,7 @@ This is an irrigation system built on Raspberry Pi Pico with MicroPython. Key co
 
 - **Microcontroller**: Raspberry Pi Pico W (RP2040)
 - **Sensors**: Soil moisture sensors via ADS1115 ADC modules (I2C)
-- **Actuators**: MOSFET switches for sensor power control, relays for valve control
+- **Actuators**: Relays for valve control
 - **Communication**: MQTT over TLS for Home Assistant integration
 - **Power**: 12V DC to 5V USB step-down converter, 220V AC input
 
@@ -124,7 +124,6 @@ irrigation-mp-hass-mqtt/
     {
       "name": "Location A",
       "valve_pin": 2,
-      "mosfet_pin": 21,
       "ads_address": "0x48",
       "ads_channel": 0
     }
@@ -463,7 +462,6 @@ Use `./scripts/factory_reset.sh` to clear device filesystem and reinstall MicroP
 - Enable garbage collection periodically
 
 ### Safety Considerations
-- **Always turn off MOSFETs** when not reading sensors
 - **Limit valve activation time** to prevent flooding
 - **Implement watchdog** to recover from hangs
 - **Validate sensor readings** before acting

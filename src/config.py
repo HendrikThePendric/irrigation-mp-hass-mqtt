@@ -89,7 +89,6 @@ class IrrigationPointConfig:
     def __init__(self, conf: dict) -> None:
         self.name: str = _get_if_valid("name", conf, str)
         self.valve_pin: int = _get_if_valid("valve_pin", conf, int)
-        self.mosfet_pin: int = _get_if_valid("mosfet_pin", conf, int)
         self.ads_address: int = _parse_ads_address(conf)
         self.ads_channel: int = _parse_ads_channel(conf)
         self.id: str = _clean_string(self.name)
@@ -173,7 +172,6 @@ class Config:
             lines.append(f"  id:             {ip.id}")
             lines.append(f"    name:         {ip.name}")
             lines.append(f"    valve_pin:    {str(ip.valve_pin)}")
-            lines.append(f"    mosfet_pin:   {str(ip.mosfet_pin)}")
             lines.append(f"    ads_address:  {hex(ip.ads_address)}")
             lines.append(f"    ads_channel:  {str(ip.ads_channel)}")
             lines.append(f"    rolling_window: {ip.rolling_window}")

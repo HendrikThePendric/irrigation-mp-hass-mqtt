@@ -8,11 +8,14 @@ sys.path.insert(0, "src")
 sys.path.insert(0, "tests")
 
 # Import simple mocks
-from simple_mocks import (MockPin,
+from simple_mocks import (
+    MockPin,
     mock_machine,
-    mock_os, mock_ntptime,
+    mock_os,
+    mock_ntptime,
     mock_time,
-    mock_ads1115,)
+    mock_ads1115,
+)
 
 
 # Create mock modules before importing ANY project code
@@ -62,9 +65,8 @@ import unittest
 class MockConfig:
     """Mock IrrigationPointConfig."""
 
-    def __init__(self, name: str, mosfet_pin: int, ads_channel: int):
+    def __init__(self, name: str, ads_channel: int):
         self.name = name
-        self.mosfet_pin = mosfet_pin
         self.ads_channel = ads_channel
         self.rolling_window = 3
         self.ema_alpha = 0.2
@@ -89,31 +91,21 @@ class TestSensor(unittest.TestCase):
 
     def test_sensor_initialization(self) -> None:
         """Test sensor initialization."""
-        config = MockConfig("Test Sensor", 21, 0)
+        config = MockConfig("Test Sensor", 0)
         ads = ADS1115Module.ADS1115()
         logger = MockLogger()
 
         # Create sensor
         sensor = Sensor(config, ads, logger)  # type: ignore
 
-        # Check that MOSFET pin was created
-        self.assertEqual(len(mock_machine.pins_created), 1)
-
-        # Check that MOSFET is initially off
-        mosfet_pin = mock_machine.pins_created[0]
-        self.assertEqual(mosfet_pin._value, 0)
-
         # Check initial sensor value
         self.assertEqual(sensor._value, 0.5)
 
     def test_sensor_measure_normal(self) -> None:
         """Test sensor measurement with normal reading."""
-        config = MockConfig("Test Sensor", 21, 0)
+        config = MockConfig("Test Sensor", 0)
         ads = ADS1115Module.ADS1115()
         logger = MockLogger()
-
-        # Reset mock pins
-        mock_machine.pins_created.clear()
 
         # Create sensor
         sensor = Sensor(config, ads, logger)  # type: ignore
@@ -123,11 +115,6 @@ class TestSensor(unittest.TestCase):
 
         # Measure sensor
         sensor.measure()
-
-        # Check that MOSFET was turned on and off
-        mosfet_pin = mock_machine.pins_created[0]
-        self.assertIn("on", [call[0] for call in mosfet_pin.calls])
-        self.assertIn("off", [call[0] for call in mosfet_pin.calls])
 
         # Check that ADS1115 was called correctly
         self.assertTrue(len(ads.read_calls) > 0)
@@ -146,12 +133,9 @@ class TestSensor(unittest.TestCase):
 
     def test_sensor_measure_out_of_range(self) -> None:
         """Test sensor measurement with out-of-range reading."""
-        config = MockConfig("Test Sensor", 21, 0)
+        config = MockConfig("Test Sensor", 0)
         ads = ADS1115Module.ADS1115()
         logger = MockLogger()
-
-        # Reset mock pins
-        mock_machine.pins_created.clear()
 
         # Create sensor
         sensor = Sensor(config, ads, logger)  # type: ignore
@@ -175,7 +159,7 @@ class TestSensor(unittest.TestCase):
 
     def test_sensor_get_value(self) -> None:
         """Test sensor get_value method."""
-        config = MockConfig("Test Sensor", 21, 0)
+        config = MockConfig("Test Sensor", 0)
         ads = ADS1115Module.ADS1115()
         logger = MockLogger()
 

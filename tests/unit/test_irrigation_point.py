@@ -66,10 +66,9 @@ import unittest
 class MockConfig:
     """Mock IrrigationPointConfig."""
 
-    def __init__(self, name: str, valve_pin: int, mosfet_pin: int, ads_channel: int):
+    def __init__(self, name: str, valve_pin: int, ads_channel: int):
         self.name = name
         self.valve_pin = valve_pin
-        self.mosfet_pin = mosfet_pin
         self.ads_channel = ads_channel
         self.rolling_window = 3
         self.ema_alpha = 0.2
@@ -94,7 +93,7 @@ class TestIrrigationPoint(unittest.TestCase):
 
     def test_irrigation_point_initialization(self) -> None:
         """Test irrigation point initialization."""
-        config = MockConfig("Test Point", 2, 21, 0)
+        config = MockConfig("Test Point", 2, 0)
         ads = ADS1115Module.ADS1115()
         logger = MockLogger()
 
@@ -107,7 +106,7 @@ class TestIrrigationPoint(unittest.TestCase):
 
     def test_irrigation_point_get_sensor_value(self) -> None:
         """Test getting sensor value from irrigation point."""
-        config = MockConfig("Test Point", 2, 21, 0)
+        config = MockConfig("Test Point", 2, 0)
         ads = ADS1115Module.ADS1115()
         logger = MockLogger()
 
@@ -124,7 +123,7 @@ class TestIrrigationPoint(unittest.TestCase):
 
     def test_irrigation_point_valve_operations(self) -> None:
         """Test valve operations through irrigation point."""
-        config = MockConfig("Test Point", 2, 21, 0)
+        config = MockConfig("Test Point", 2, 0)
         ads = ADS1115Module.ADS1115()
         logger = MockLogger()
 
@@ -153,7 +152,7 @@ class TestIrrigationPoint(unittest.TestCase):
 
     def test_irrigation_point_measure_sensor(self) -> None:
         """Test measure_sensor method."""
-        config = MockConfig("Test Point", 2, 21, 0)
+        config = MockConfig("Test Point", 2, 0)
         ads = ADS1115Module.ADS1115()
         logger = MockLogger()
 
@@ -165,7 +164,6 @@ class TestIrrigationPoint(unittest.TestCase):
 
         # Test measuring sensor
         point.measure_sensor()
-        # Should create a pin for the MOSFET
         self.assertTrue(len(mock_machine.pins_created) > 0)
 
 

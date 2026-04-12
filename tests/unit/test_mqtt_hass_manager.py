@@ -68,8 +68,8 @@ class MockConfig:
         self.station_mqtt_id = "teststation-mqtt"
         self.station_name = "Test Station"
         self.irrigation_points = {
-            "pointa": MockPointConfig("Point A", 2, 21, 0x48, 0),
-            "pointb": MockPointConfig("Point B", 3, 22, 0x49, 1),
+            "pointa": MockPointConfig("Point A", 2, 0x48, 0),
+            "pointb": MockPointConfig("Point B", 3, 0x49, 1),
         }
         self.network = MockNetworkConfig()
 
@@ -90,13 +90,11 @@ class MockPointConfig:
         self,
         name: str,
         valve_pin: int,
-        mosfet_pin: int,
         ads_address: int,
         ads_channel: int,
     ) -> None:
         self.name = name
         self.valve_pin = valve_pin
-        self.mosfet_pin = mosfet_pin
         self.ads_address = ads_address
         self.ads_channel = ads_channel
         self.id = name.lower().replace(" ", "")

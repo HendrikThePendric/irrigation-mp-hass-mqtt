@@ -1,86 +1,66 @@
-from machine import Pin, I2C
-from time import sleep, sleep_ms
-from ads1x15 import ADS1115
+"""Read all ADS1115 channels in a continuous loop.
+
+Scans I2C for ADS1115 modules, then reads all 4 channels on each module
+every second. Useful for verifying sensor wiring and checking voltage
+readings.
+
+Runs on the Pico W via: mpremote run diagnostics/check_sensors.py
+Press Ctrl+C to stop.
+"""
+
+from machine import Pin, I2C  # type: ignore
+from time import sleep
+from ads1x15 import ADS1115  # type: ignore
 
 
-MOSFET_PINS = [18, 19, 20, 21, 22, 28, 26, 27]
-# Set to None to test all mosfets
-CURRENT_MOSFET_PIN: int | None = 18
+# ADS1115 I2C addresses present on the board
+ADS_ADDRESSES: list[int] = [0x48, 0x49]
 
 
-def read_ads_channels(ads: ADS1115, ads_num: int):
+def read_ads_channels(ads: ADS1115, address: int) -> None:
+    """Read and print all 4 channels of a single ADS1115."""
     for ch in range(4):
-        raw_value = ads.read(0, ch)  # Note: channel1 parameter
-        voltage = raw_value * 6.144 / 32767  # Convert to voltage
-        print(f"ADS{ads_num} CH{ch}: Raw={raw_value}, Voltage={voltage:.3f}V")
-
-
-def read_all_sensors_for_mosfet(
-    mosfet: Pin, ads1: ADS1115, ads2: ADS1115, sleep_duration: int
-):
-    mosfet.on()
-    print(f"MOSFET ON - value: {mosfet.value()}")
-    sleep_ms(300)  # Wait for sensor to stabilize
-
-    read_ads_channels(ads1, 1)
-    read_ads_channels(ads2, 2)
-
-    sleep(sleep_duration)
-    # Turn MOSFET OFF
-    mosfet.off()
-    print(f"MOSFET OFF - value: {mosfet.value()}")
-    sleep(0.5)
+        raw_value: int = ads.read(0, ch)
+        voltage: float = raw_value * 6.144 / 32767
+        print(
+            f"  ADS@{hex(address)} CH{ch}: Raw={raw_value:6d}  Voltage={voltage:.3f}V"
+        )
 
 
 def main() -> None:
-    # Wait 5 seconds so we are sure to catch all output on the terminal
+    # Wait so serial monitor can connect and catch all output
     sleep(5)
 
-    # Initialize I2C and ADS1115
+    # Initialize I2C
     i2c = I2C(0, scl=Pin(1), sda=Pin(0), freq=400000)
-    ads1 = ADS1115(i2c, address=0x48, gain=0)  # First ADS1115
-    ads2 = ADS1115(i2c, address=0x49, gain=0)  # Second ADS1115
-    mosfet_pin_objects = [Pin(p, Pin.OUT) for p in MOSFET_PINS]
+    found = i2c.scan()
+    print(f"I2C addresses found: {[hex(a) for a in found]}")
 
-    print("Starting MOSFET and Sensor Test...")
-    print("I2C addresses found:", [hex(addr) for addr in i2c.scan()])
+    # Create ADS1115 objects for each address present on the bus
+    ads_modules: list[tuple[int, ADS1115]] = []
+    for addr in ADS_ADDRESSES:
+        if addr in found:
+            ads_modules.append((addr, ADS1115(i2c, address=addr, gain=0)))
+            print(f"  ADS1115 @ {hex(addr)} — OK")
+        else:
+            print(f"  ADS1115 @ {hex(addr)} — NOT FOUND (skipping)")
 
-    if CURRENT_MOSFET_PIN:
-        # This is meant to help check if the sensor readings are correct.
-        # Connect a potentiometer to a single sensor and check the voltage changes
-        # as expected when turning the knob
-        print(
-            f"Running test for all sensors with single MOSFET pin {CURRENT_MOSFET_PIN}"
-        )
+    if not ads_modules:
+        print("No ADS1115 modules found. Check wiring.")
+        return
 
-        if CURRENT_MOSFET_PIN not in MOSFET_PINS:
-            print(f"Error: {CURRENT_MOSFET_PIN} not in MOSFET_PINS list")
-            return
+    print()
+    print("Starting continuous sensor read (Ctrl+C to stop)...")
+    print()
 
-        # Make sure all are off initially
-        for mosfet_pin in mosfet_pin_objects:
-            mosfet_pin.off()
-
-        mosfet_index = MOSFET_PINS.index(CURRENT_MOSFET_PIN)
-        mosfet = mosfet_pin_objects[mosfet_index]
-
-        while True:
-            read_all_sensors_for_mosfet(mosfet, ads1, ads2, 1)
-
-    else:
-        # This is meant to help figuring out how the MOSFET pins and sensor ADS/Channels
-        # are mapped to terminals.
-        print("Running test for all sensors and all MOSFET pins")
-
-        # Make sure all are off initially
-        for mosfet_pin in mosfet_pin_objects:
-            mosfet_pin.off()
-
-        while True:
-            for i, mosfet_pin in enumerate(mosfet_pin_objects):
-                print(f"Testing MOSFET on pin {MOSFET_PINS[i]}")
-                # Long sleep duration during which you can check which terminal is being activated
-                read_all_sensors_for_mosfet(mosfet_pin, ads1, ads2, 40)
+    t: int = 0
+    while True:
+        print(f"--- t={t}s ---")
+        for addr, ads in ads_modules:
+            read_ads_channels(ads, addr)
+        print()
+        t += 1
+        sleep(1)
 
 
 if __name__ == "__main__":
