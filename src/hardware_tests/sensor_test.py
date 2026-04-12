@@ -5,7 +5,7 @@ from ads1x15 import ADS1115
 
 MOSFET_PINS = [18, 19, 20, 21, 22, 28, 26, 27]
 # Set to None to test all mosfets
-CURRENT_MOSFET_PIN: int | None = 28
+CURRENT_MOSFET_PIN: int | None = 18
 
 
 def read_ads_channels(ads: ADS1115, ads_num: int):

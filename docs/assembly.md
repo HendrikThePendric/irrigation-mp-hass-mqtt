@@ -2,12 +2,80 @@
 
 The assembly steps contain checks to verify things are working as expected. However they do not include instructions for how to solve these, because there could be a lot of different reasons, e.g. faulty modules, incorrect wiring, bad solder joints, etc.
 
-### The perfboard
+## System overview
 
-#### Power supply
+```mermaid
+graph LR
+    subgraph Power
+        MAINS[220V AC] --> PSU[12V DC PSU]
+        PSU --> STEP[12V→5V USB stepdown]
+    end
+
+    subgraph Perfboard
+        STEP --> VBUS[5V rail]
+        GND[GND rail]
+
+        subgraph Pico W
+            P_VBUS[VBUS pin 40]
+            P_GND[GND pin 23]
+            P_3V3[3V3 OUT pin 36]
+            P_SDA[SDA GP0 pin 1]
+            P_SCL[SCL GP1 pin 2]
+            P_VALVE_GPIOS[Valve GPIOs]
+        end
+
+        P_VBUS --- VBUS
+        P_GND --- GND
+
+        subgraph Level Shifter
+            LV[LV 3.3V side]
+            HV[HV 5V side]
+        end
+
+        P_3V3 --- LV
+        VBUS --- HV
+        P_SDA --- LV
+        P_SCL --- LV
+
+        subgraph I2C Bus
+            ADS1["ADS1115-1 (0x48)"]
+            ADS2["ADS1115-2 (0x49)"]
+        end
+
+        HV --- ADS1
+        ADS1 --- ADS2
+
+        subgraph Sensor Terminals
+            T1[Terminal 1] --- ADS1
+            T2[Terminal 2] --- ADS1
+            T3[Terminal 3] --- ADS1
+            T4[Terminal 4] --- ADS1
+            T5[Terminal 5] --- ADS2
+            T6[Terminal 6] --- ADS2
+            T7[Terminal 7] --- ADS2
+            T8[Terminal 8] --- ADS2
+        end
+
+        VBUS --- Sensor Terminals
+        GND --- Sensor Terminals
+
+        subgraph Valve Relays
+            V1[Relay 1]
+            V2[Relay 2]
+            V3[Relay 3]
+            V4[Relay 4]
+        end
+
+        P_VALVE_GPIOS --- Valve Relays
+    end
+```
+
+## The perfboard
+
+### Power supply
 
 1. Solder a 2-point screw terminal onto the board to connect to the 220V AC -> 12V DC converter's 12V end
-2. Solder the 12V -> 5V USB stepsdown converter to the board, and connect to the terminal
+2. Solder the 12V -> 5V USB stepdown converter to the board, and connect to the terminal
 3. Plug into to mains and check you see the expected 12V and 5V (on the USB side)
 4. Solder the PICO header rails onto the board
 5. Create 2 power rails on the long sides of the board
@@ -17,18 +85,18 @@ The assembly steps contain checks to verify things are working as expected. Howe
 
 From this point onwards you can unplug everything from the mains, and disconnect the PICO from the stepdown converter. The power supply is working correctly, and going forward we'll need to test various modules using code, so we will connect the PICO to a development machine (computer) via USB instead.
 
-#### Analog signal readings
+### Analog signal readings
 
-To impove reading accuracy we use 2 external ADS1115 modules to read the sensor values. Some 0.1μF ceramic capacitators are also added. When adding these it is easiest to simply colocate them with the jump cable ends, this fits, is space-efficient and saves you having to drag-solder an extra connection.
+To improve reading accuracy we use 2 external ADS1115 modules to read the sensor values. Some 0.1μF ceramic capacitors are also added. When adding these it is easiest to simply colocate them with the jump cable ends, this fits, is space-efficient and saves you having to drag-solder an extra connection.
 
 1. Solder the level shifter onto the board, and establish connections to the PICO and power rail
     1. HV to the 5V power rail
     2. LV to the PICO's 3V3 (OUT) (pin 36)
     3. GND on both sides to the GND rail
     4. LV1 to the PICO's SDA (pin 1)
-    5. LV2 tot the PICO's SCL (pin 2)
-    6. Add a capacitator on the HV side, between HV and its GND
-    7. Add a capacitator on the LV side, between LV and its GND
+    5. LV2 to the PICO's SCL (pin 2)
+    6. Add a capacitor on the HV side, between HV and its GND
+    7. Add a capacitor on the LV side, between LV and its GND
 2. Solder the 2 ADS1115 modules onto the board. For the first one, ensure you leave at least 2 free holes for daisy chaining.
 3. Now connect ADS1115-1 and ADS1115-2 to the rails, the level shifter, and each other
     1. Both VDD's to the power rail
@@ -39,7 +107,7 @@ To impove reading accuracy we use 2 external ADS1115 modules to read the sensor 
     4. ADS1115-1 SDA to HV1 *
     5. ADS1115-1 SCL to ADS1115-2 SCL
     5. ADS1115-1 SDA to ADS1115-2 SDA
-4. For each ADS1115, add a capacitator between VDD and ground
+4. For each ADS1115, add a capacitor between VDD and ground
 
 **[*] NOTE THAT IN 3 & 4 THE PINS ARE ACTUALLY IN REVERSE ORDER ON THE ADS1115 COMPARED TO THE LEVEL SHIFTER**
 
@@ -64,18 +132,28 @@ while True:
     time.sleep(2)
 ```
 
-#### Sensor on/off switches with screw terminals
+### Sensor terminals
 
-To extend the lifespan of the sensors from days/week when continiously powered on, to potentially years, we add a MOSFET switch for each sensor, so the sensors are only powered on when they are needed. This limits corrosion to a minimum. The capacitators and resistors are needed in the this setup to deal with these modules not being powered continiously. The wires for each sensor need to be attached to the perfboard in a way that allows disassembly, and for this we use a screw terminal with three pins. So for each sensor we end up with a small cluster of components that fit together as follows, starting from the end-point:
-1. Solder the terminal to the perfboard, with the srews facing the GND or 5V rails
-2. At the back of the terminal insert a jump wire that can be connected to one of the ADS1115's A0-3 pins. We start with this so the capacitators from step 3-4 can be placed over the top.
-3. At the back of the terminal we place a 10μF electrolytic capacitator, ensuring that the positive leg is next to what is to be the VCC/5V pin on the terminal. The negative leg should go with the GND pin of the terminal
-4. Beind this we place a 0.1μF ceramic capacitator, with the legs in holes adjacent to the holes used in step 3.
-5. Now we drag-solder these sets of three pins togehter:
-     1. terminal 5V -> 10μF electrolytic capacitator positive leg -> 0.1μF ceramic capacitator leg
-     2. terminal GND -> 10μF electrolytic capacitator negative leg -> 0.1μF ceramic capacitator leg
-6. Now connect the GND leg of the 0.1μF ceramic capacitator (5.2) to the GND rail
-6. After this we place the MOSFET, with its resistors:
-    1. G (Gate): This is the control-pin, so connect to one of the PICO's GP0-20 pins via a 100Ω resistor. It should however also be connected to the GND rail, via a 10kΩ resistor
-    2. D (Drain): This is the output pin, so connect it to the 5V power rail
-    3. S (Source): This is in input pin, so connect it to the VCC of the terminal, or actually the leg of the 0.1μF ceramic capacitator which is connected to that.
+Each sensor connects to the board via a 3-pin screw terminal (VCC, GND, AOUT). The sensors are capacitive soil moisture sensors which are powered permanently from the 5V rail. Capacitive sensors do not suffer from corrosion because their sensing element is an insulated copper trace — no bare metal is exposed to the soil.
+
+```mermaid
+graph LR
+    RAIL_5V[5V rail] --> T_VCC[Terminal VCC]
+    RAIL_GND[GND rail] --> T_GND[Terminal GND]
+    T_AOUT[Terminal AOUT] --> ADS[ADS1115 A0-3]
+
+    subgraph Screw Terminal
+        T_VCC
+        T_GND
+        T_AOUT
+    end
+```
+
+For each sensor terminal:
+
+1. Solder the 3-pin screw terminal to the perfboard, with the screws facing the GND or 5V rails
+2. Connect the terminal VCC pin to the 5V power rail
+3. Connect the terminal GND pin to the GND rail
+4. Connect the terminal AOUT pin to one of the ADS1115's A0-3 input pins via a jump wire
+
+To test, connect a sensor to a terminal and run `src/hardware_tests/sensor_test.py`. The ADS1115 channel corresponding to that terminal should show a voltage (typically 2-3V for a dry sensor, dropping to ~1V when submerged in water). All other channels should read ~4.5V (floating high).
