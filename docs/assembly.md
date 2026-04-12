@@ -6,81 +6,17 @@ The assembly steps contain checks to verify things are working as expected. Howe
 
 ```mermaid
 graph LR
-    subgraph Power
-        MAINS[220V AC] --> PSU[12V DC PSU]
-        PSU --> STEP["12V→5V USB stepdown"]
-    end
+    MAINS[220V AC] --> PSU[12V DC PSU]
+    PSU --> STEP[5V Stepdown]
+    STEP --> PICO[Pico W]
 
-    STEP --> VBUS[5V rail]
+    PSU --> RELAY[8-channel relay module]
+    PICO -->|GPIO pins 2-9| RELAY
+    RELAY --> TB[Valve terminal board]
+    TB --> VALVES[Solenoid valves]
 
-    subgraph Pico W
-        P_VBUS[VBUS pin 40]
-        P_GND[GND pin 23]
-        P_3V3[3V3 OUT pin 36]
-        P_SDA[SDA GP0 pin 1]
-        P_SCL[SCL GP1 pin 2]
-        P_VALVE_GPIOS[Valve GPIOs]
-    end
-
-    P_VBUS --- VBUS
-    P_GND --- GND[GND rail]
-
-    subgraph Level Shifter
-        LV[LV 3.3V side]
-        HV[HV 5V side]
-    end
-
-    P_3V3 --- LV
-    VBUS --- HV
-    P_SDA --- LV
-    P_SCL --- LV
-
-    subgraph I2C Bus
-        ADS1["ADS1115-1 (0x48)"]
-        ADS2["ADS1115-2 (0x49)"]
-    end
-
-    HV --- ADS1
-    ADS1 --- ADS2
-
-    VBUS --- T1[Terminal 1]
-    VBUS --- T2[Terminal 2]
-    VBUS --- T3[Terminal 3]
-    VBUS --- T4[Terminal 4]
-    VBUS --- T5[Terminal 5]
-    VBUS --- T6[Terminal 6]
-    VBUS --- T7[Terminal 7]
-    VBUS --- T8[Terminal 8]
-
-    GND --- T1
-    GND --- T2
-    GND --- T3
-    GND --- T4
-    GND --- T5
-    GND --- T6
-    GND --- T7
-    GND --- T8
-
-    T1 --- ADS1
-    T2 --- ADS1
-    T3 --- ADS1
-    T4 --- ADS1
-    T5 --- ADS2
-    T6 --- ADS2
-    T7 --- ADS2
-    T8 --- ADS2
-
-    subgraph Valve Relays
-        V1[Relay 1]
-        V2[Relay 2]
-        V3[Relay 3]
-        V4[Relay 4]
-    end
-
-    P_VALVE_GPIOS --- V1
-    P_VALVE_GPIOS --- V2
-    P_VALVE_GPIOS --- V3
-    P_VALVE_GPIOS --- V4
+    PICO -->|I2C| ADS[ADS1115 modules]
+    ADS --> SENSORS[Soil moisture sensors]
 ```
 
 ## The perfboard
@@ -170,3 +106,35 @@ For each sensor terminal:
 4. Connect the terminal AOUT pin to one of the ADS1115's A0-3 input pins via a jump wire
 
 To test, connect a sensor to a terminal and run `src/hardware_tests/sensor_test.py`. The ADS1115 channel corresponding to that terminal should show a voltage (typically 2-3V for a dry sensor, dropping to ~1V when submerged in water). All other channels should read ~4.5V (floating high).
+
+### Valve relays
+
+The system uses an 8-channel relay module to control solenoid valves. The relay module is powered directly from the 12V DC PSU (not from the perfboard). The only connection between the Pico and the relay module is the GPIO signal pins.
+
+A separate small perfboard with 16 screw terminals serves as the terminal board for valve connections. Each valve connects to one pair of terminals (12V and GND).
+
+```mermaid
+graph LR
+    PSU[12V DC PSU] -->|12V + GND| RELAY[8-channel relay module]
+    PICO[Pico W GPIO pin] -->|signal| RELAY
+    RELAY --> TB[Valve terminal board]
+    TB -->|12V + GND pair| VALVE[Solenoid valve]
+```
+
+1. Connect the relay module's VCC and GND (input side) to the 12V DC PSU
+2. Connect each relay IN pin to its corresponding Pico GPIO pin (see table below)
+3. Wire the relay output side through to the valve terminal board: 12V from the PSU powers one set of terminals, GND is routed through the relay's COM/NO contacts to the other set
+4. For each solenoid valve, connect its two wires to one pair of terminals on the terminal board
+
+| Terminal | GPIO Pin |
+|----------|----------|
+| Left-1   | 9        |
+| Left-2   | 8        |
+| Left-3   | 7        |
+| Left-4   | 6        |
+| Right-1  | 2        |
+| Right-2  | 3        |
+| Right-3  | 4        |
+| Right-4  | 5        |
+
+To test, run `src/hardware_tests/valve_test.py`. The script cycles through each relay channel with a 40-second pause, so you can verify which terminal activates for each GPIO pin. Use this to populate the mapping table in your `config.json`.

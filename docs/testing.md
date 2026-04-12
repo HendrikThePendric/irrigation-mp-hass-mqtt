@@ -1,140 +1,155 @@
-# Testing Framework
+# Testing
 
-This project includes a simple but effective testing framework that runs tests in **actual MicroPython** (not CPython) with mocked hardware modules.
+Tests run in a MicroPython unix port interpreter with mocked hardware modules, using the standard `unittest.TestCase` framework.
 
-## Quick Start
+## Setup
+
+Install the MicroPython unix port and unittest framework (first time only):
 
 ```bash
-# Setup MicroPython runtime (first time only)
 ./scripts/setup_micropython_test_env.sh
+```
 
-# Run all tests
+This builds MicroPython from source and installs the `unittest` package into it. The resulting binary is `./micropython-local` in the project root.
+
+## Running tests
+
+Run all tests:
+
+```bash
 python3 tests/run_tests.py
+```
 
-# Run individual test in MicroPython
+Run a single test file in MicroPython:
+
+```bash
 ./micropython-local tests/unit/test_rolling_average.py
 ```
 
-## Framework Design
+The test runner (`tests/run_tests.py`) automatically discovers all `test_*.py` files under `tests/` recursively, runs each one in the MicroPython interpreter, and reports pass/fail based on unittest output.
 
-### Simple & Incremental
-- **No complex mock systems**: Simple mock classes with dependency injection
-- **Test-first approach**: Write mocks, test them, then test real code
-- **MicroPython runtime**: Tests run in actual MicroPython interpreter
+## Writing tests
 
-### Key Components
+### Basic test (no hardware mocks)
 
-1. **Test Runner** (`tests/run_tests.py`):
-   - Discovers and runs all test files
-   - Runs tests in MicroPython interpreter
-   - Provides clear pass/fail output
-
-2. **Simple Mocks** (`tests/simple_mocks.py`):
-   - Minimal mock classes for hardware modules
-   - Tracks state for assertions
-   - Easy to extend for new tests
-
-3. **Test Files** (`tests/unit/*.py`):
-   - Self-contained test scripts
-   - Print results with ✅/❌ indicators
-   - Can run standalone in MicroPython
-
-## Writing Tests
-
-### 1. Test Hardware-Free Modules
-Start with modules that don't need mocks (like `rolling_average.py`):
+For modules that don't touch hardware (e.g., `rolling_average.py`):
 
 ```python
-# tests/unit/test_example.py
 import sys
 sys.path.insert(0, "src")
-from example import Example
+import unittest
 
-def test_example() -> bool:
-    example = Example()
-    result = example.calculate()
-    if result == expected:
-        print("✅ Test passed")
-        return True
-    else:
-        print(f"❌ Expected {expected}, got {result}")
-        return False
+from rolling_average import RollingAverage
+
+class TestRollingAverage(unittest.TestCase):
+    def test_basic_average(self) -> None:
+        ra = RollingAverage(window_size=3)
+        ra.add_reading(10)
+        ra.add_reading(20)
+        ra.add_reading(30)
+        self.assertAlmostEqual(ra.get_average(), 15.6, places=1)
+
+if __name__ == "__main__":
+    unittest.main()
 ```
 
-### 2. Test Hardware-Dependent Modules
-Use simple mocks for hardware dependencies:
+### Test with hardware mocks
+
+For modules that depend on `machine`, `os`, `time`, etc., mock those modules in `sys.modules` **before** importing the code under test:
 
 ```python
-# tests/unit/test_hardware.py
 import sys
+sys.path.insert(0, "src")
 sys.path.insert(0, "tests")
-from simple_mocks import MockPin, mock_machine, mock_os
+import unittest
 
-# Create mock modules before importing hardware-dependent code
+from simple_mocks import mock_machine, mock_os, mock_time
+
+# Create a module-like object for machine
 class MachineModule:
     Pin = mock_machine.Pin
     unique_id = mock_machine.unique_id
+    Timer = mock_machine.Timer
+    reset = lambda: None
 
-sys.modules['machine'] = MachineModule()
-sys.modules['os'] = mock_os
+sys.modules["machine"] = MachineModule()
+sys.modules["os"] = mock_os
+sys.modules["time"] = mock_time
 
-# Now import and test
-from hardware_module import HardwareClass
+# Now safe to import hardware-dependent code
+from valve import Valve
 
-def test_hardware() -> bool:
-    # Test with mocked hardware
-    hardware = HardwareClass()
-    hardware.do_something()
-    
-    # Assert mock state
-    if mock_machine.pins_created[0]._value == 1:
-        print("✅ Hardware test passed")
-        return True
-    else:
-        print("❌ Hardware test failed")
-        return False
+class TestValve(unittest.TestCase):
+    def test_open_sets_pin_high(self) -> None:
+        pin = mock_machine.pins_created[-1] if mock_machine.pins_created else None
+        valve = Valve(pin_number=2)
+        valve.open()
+        self.assertEqual(valve.get_state(), "open")
+
+if __name__ == "__main__":
+    unittest.main()
 ```
 
-### 3. Mock Design Principles
-- **Keep it simple**: Mock only what's needed for the test
-- **Track state**: Use attributes like `_value`, `calls` for assertions
-- **Incremental**: Add mock functionality as tests need it
+The key pattern: set up `sys.modules` with mocks at the top of the file, then import project code below that.
 
-## Current Test Coverage
+## Mock system
 
-### ✅ Working Tests
-- `rolling_average.py`: Rolling average and EMA calculations
-- `valve.py`: Valve control with mocked `machine.Pin`
+All mocks live in `tests/simple_mocks.py`. Available mock classes:
 
-### 🔧 Ready to Test Next
-- `sensor.py`: Soil moisture sensor with ADS1115 mock
-- `irrigation_point.py`: Complete irrigation point logic
-- `mqtt_hass_manager.py`: MQTT integration with mocked network
+| Mock | What it replaces | Key features |
+|------|-----------------|--------------|
+| `MockMachine` / `MockPin` | `machine.Pin` | Tracks pin state (`_value`), records calls |
+| `MockTimer` / `TimerFactory` | `machine.Timer` | Simulates timer expiration, one-shot and periodic modes |
+| `MockOS` | `os` | File system stubs, `stat()`, `path` submodule |
+| `MockTime` | `time` | Controllable `ticks_ms()`, `time()`, `sleep()` with `advance()` and `set_time()` |
+| `MockNTPTime` | `ntptime` | No-op `settime()` |
+| `MockADS1115` / `MockADS1x15Module` | `ads1x15` | Configurable `read()` and `raw_to_v()` return values |
+| `MockMQTTClient` | `umqtt.simple.MQTTClient` | Tracks published messages, subscriptions, connection state |
+| `MockNetwork` | `network` | Mock WLAN with connect/disconnect tracking |
+| `MockGC` | `gc` | Tracks `collect()` calls |
 
-## Extending the Framework
+Global pre-built instances are available at the bottom of the file (`mock_machine`, `mock_os`, `mock_time`, etc.).
 
-### Adding New Mocks
-1. Add mock class to `simple_mocks.py`
-2. Add factory method to `MockMachine` if needed
-3. Update test to inject mock before import
+### Adding a new mock
 
-### Testing Complex Scenarios
-For integration tests (MQTT → main loop → hardware):
-1. Create comprehensive mock in `tests/integration/`
-2. Test full message flow
-3. Assert hardware state changes
+1. Add the mock class to `tests/simple_mocks.py`
+2. Create a global instance if needed
+3. In your test file, inject it into `sys.modules` before importing project code
 
-## Benefits
+## Test coverage
 
-1. **Real MicroPython**: Tests run in actual MicroPython interpreter
-2. **Simple Debugging**: No complex mock framework bugs
-3. **Incremental**: Add tests as you develop features
-4. **Fast**: Direct MicroPython execution, no complex setup
+### Unit tests (`tests/unit/`)
 
-## Limitations
+| Test file | Module under test |
+|-----------|-------------------|
+| `test_config.py` | Configuration parsing and validation |
+| `test_logger.py` | Logging utilities with file I/O mocking |
+| `test_rolling_average.py` | Rolling average and EMA calculations |
+| `test_valve.py` | Valve control with mocked GPIO pins |
+| `test_sensor.py` | Soil moisture sensor with ADS1115 mock |
+| `test_irrigation_point.py` | Individual irrigation point logic |
+| `test_irrigation_station.py` | Station management with multiple points |
+| `test_time_keeper.py` | NTP time synchronization and scheduling |
+| `test_watchdog.py` | System watchdog with timer mocking |
+| `test_mqtt_hass_manager.py` | MQTT Home Assistant integration |
+| `test_mqtt_hass_entities.py` | HA entity discovery and state publishing |
+| `test_mqtt_robust_client.py` | MQTT client with reconnection logic |
+| `test_wifi_manager.py` | WiFi connection management |
+| `test_task_scheduler.py` | Task scheduling |
 
-1. **Manual Mocking**: Need to create mocks for each hardware module
-2. **Simple Assertions**: Basic print-based testing (not unittest framework)
-3. **No Test Discovery**: Manual test file organization
+### Integration tests (`tests/integration/`)
 
-The framework strikes a balance between simplicity and effectiveness, focusing on testing real code in MicroPython rather than building complex test infrastructure.
+| Test file | What it tests |
+|-----------|---------------|
+| `test_firmware_controller.py` | End-to-end firmware controller flow |
+
+### Hardware tests (`src/hardware_tests/`)
+
+These run on the actual Pico device, not in the test runner:
+
+```bash
+mpremote run src/hardware_tests/sensor_test.py
+mpremote run src/hardware_tests/valve_test.py
+```
+
+See `src/hardware_tests/README.md` for terminal-to-GPIO/ADS mapping tables.

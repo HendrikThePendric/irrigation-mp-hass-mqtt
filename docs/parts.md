@@ -35,8 +35,9 @@
 
 | Part | Quantity | Notes |
 |------|----------|-------|
-| Solenoid valve | up to 4 | 12V or as required |
-| Relay module | up to 4 | Controlled by Pico GPIO |
+| Solenoid valve | up to 8 | 12V |
+| 8-channel relay module | 1 | Controlled by Pico GPIO, powered from 12V PSU |
+| Small perfboard with 16 screw terminals | 1 | Terminal board for valve connections |
 
 ## Wiring
 
