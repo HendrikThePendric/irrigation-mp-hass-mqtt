@@ -267,6 +267,11 @@ class MockTime:
         return MockTime._ticks
 
     @staticmethod
+    def ticks_diff(ticks1: int, ticks2: int) -> int:
+        """Mock ticks_diff - returns simple difference."""
+        return ticks1 - ticks2
+
+    @staticmethod
     def reset_ticks() -> None:
         """Reset tick counter for tests."""
         MockTime._ticks = 0
@@ -333,6 +338,7 @@ class MockMQTTClient:
         self.disconnect_called = False
         self.connect_calls = []
         self.subscribe_calls = []
+        self.keepalive = kwargs.get("keepalive", 0)
         # Register this instance
         MockMQTTClient.instances.append(self)
 
@@ -349,6 +355,9 @@ class MockMQTTClient:
 
     def subscribe(self, topic):
         self.subscribe_calls.append(topic)
+
+    def ping(self):
+        pass
 
     def check_msg(self):
         return None
