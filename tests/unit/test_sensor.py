@@ -101,59 +101,111 @@ class TestSensor(unittest.TestCase):
         # Check initial sensor value
         self.assertEqual(sensor._value, 0.5)
 
-    def test_sensor_measure_normal(self) -> None:
-        """Test sensor measurement with normal reading."""
+    def test_sensor_measure_wet(self) -> None:
+        """Test sensor measurement with wet soil reading."""
         config = MockConfig("Test Sensor", 0)
         ads = ADS1115Module.ADS1115()
         logger = MockLogger()
 
-        # Create sensor
         sensor = Sensor(config, ads, logger)  # type: ignore
 
-        # Mock ADS1115 to return a normal voltage (2.5V -> 0.5 normalized)
-        ads.voltage_return_value = 2.5  # 2.5V / 5V = 0.5
+        # 0.95V -> normalized 0.19 -> moisture = (0.48-0.19)/(0.48-0.19) = 1.0
+        ads.voltage_return_value = 0.95
 
-        # Measure sensor
         sensor.measure()
 
-        # Check that ADS1115 was called correctly
         self.assertTrue(len(ads.read_calls) > 0)
-
-        # Check channel
         rate, channel = ads.read_calls[0]
         self.assertEqual(channel, config.ads_channel)
-
-        # Check that raw_to_v was called
         self.assertTrue(len(ads.raw_to_v_calls) > 0)
 
-        # Check sensor value (should be around 0.5 with 2.5V reading)
         value = sensor.get_value()
-        expected = 0.5  # 2.5V / 5V = 0.5
-        self.assertAlmostEqual(value, expected, places=2)
+        self.assertAlmostEqual(value, 1.0, places=1)
 
-    def test_sensor_measure_out_of_range(self) -> None:
-        """Test sensor measurement with out-of-range reading."""
+    def test_sensor_measure_dry(self) -> None:
+        """Test sensor measurement with dry soil reading."""
         config = MockConfig("Test Sensor", 0)
         ads = ADS1115Module.ADS1115()
         logger = MockLogger()
 
-        # Create sensor
         sensor = Sensor(config, ads, logger)  # type: ignore
 
-        # Mock ADS1115 to return an out-of-range voltage (6V -> 1.2 normalized, should trigger error)
-        ads.voltage_return_value = 6.0
+        # 2.4V -> normalized 0.48 -> moisture = (0.48-0.48)/(0.48-0.19) = 0.0
+        ads.voltage_return_value = 2.40
 
-        # Store initial value
-        initial_value = sensor.get_value()
-
-        # Measure sensor - should log error but not crash
         sensor.measure()
 
-        # Check that error was logged
+        value = sensor.get_value()
+        self.assertAlmostEqual(value, 0.0, places=1)
+
+    def test_sensor_measure_midrange(self) -> None:
+        """Test sensor measurement with mid-range reading."""
+        config = MockConfig("Test Sensor", 0)
+        ads = ADS1115Module.ADS1115()
+        logger = MockLogger()
+
+        sensor = Sensor(config, ads, logger)  # type: ignore
+
+        # 1.675V -> normalized 0.335 -> moisture = (0.48-0.335)/(0.48-0.19) = 0.5
+        ads.voltage_return_value = 1.675
+
+        sensor.measure()
+
+        value = sensor.get_value()
+        self.assertAlmostEqual(value, 0.5, places=1)
+
+    def test_sensor_measure_clamps_above_wet(self) -> None:
+        """Test that voltage below WET calibration is clamped to 1.0."""
+        config = MockConfig("Test Sensor", 0)
+        ads = ADS1115Module.ADS1115()
+        logger = MockLogger()
+
+        sensor = Sensor(config, ads, logger)  # type: ignore
+
+        # 0.5V -> normalized 0.10 -> moisture would be >1.0, clamped to 1.0
+        ads.voltage_return_value = 0.5
+
+        sensor.measure()
+
+        value = sensor.get_value()
+        self.assertAlmostEqual(value, 1.0, places=1)
+
+    def test_sensor_measure_clamps_below_dry(self) -> None:
+        """Test that voltage above DRY calibration is clamped to 0.0."""
+        config = MockConfig("Test Sensor", 0)
+        ads = ADS1115Module.ADS1115()
+        logger = MockLogger()
+
+        sensor = Sensor(config, ads, logger)  # type: ignore
+
+        # 4.0V -> normalized 0.80 -> moisture would be <0.0, clamped to 0.0
+        ads.voltage_return_value = 4.0
+
+        sensor.measure()
+
+        value = sensor.get_value()
+        self.assertAlmostEqual(value, 0.0, places=1)
+
+    def test_sensor_measure_adc_error(self) -> None:
+        """Test sensor handles ADC errors gracefully."""
+        config = MockConfig("Test Sensor", 0)
+        ads = ADS1115Module.ADS1115()
+        logger = MockLogger()
+
+        sensor = Sensor(config, ads, logger)  # type: ignore
+
+        # Make read() raise an exception
+        def failing_read(rate, channel):
+            raise OSError("I2C bus error")
+
+        ads.read = failing_read
+
+        initial_value = sensor.get_value()
+        sensor.measure()
+
         error_logged = any("Error reading sensor" in msg for msg in logger.messages)
         self.assertTrue(error_logged)
 
-        # Check that sensor value remains at initial value (last known good value)
         final_value = sensor.get_value()
         self.assertEqual(final_value, initial_value)
 

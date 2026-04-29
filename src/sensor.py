@@ -3,6 +3,14 @@ from config import IrrigationPointConfig
 from logger import Logger
 from rolling_average import RollingAverage
 
+# Calibration constants for soil moisture sensor.
+# These are normalized voltage values (voltage / 5.0) defining the sensor's
+# operating range. Adjust these based on your sensor's observed readings.
+# SENSOR_DRY: normalized voltage in dry soil (packed in pots, not in open air)
+# SENSOR_WET: normalized voltage in fully watered/saturated soil
+SENSOR_DRY = 0.48  # Normalized voltage when sensor is in dry soil
+SENSOR_WET = 0.19  # Normalized voltage when sensor is in wet soil
+
 
 class Sensor:
     """Represents a soil moisture sensor connected via ADS1115 ADC."""
@@ -27,9 +35,14 @@ class Sensor:
             raw = self._ads.read(0, self._ads_channel)
             voltage = self._ads.raw_to_v(raw)
 
-            # Normalize to 0.0-1.0 range (assuming 0-5V sensor range)
-            # Round to 2 decimal places to handle minor floating-point variations
-            normalized_value = round(voltage / 5.0, 2)
+            # Normalize voltage to 0.0-1.0 range (assuming 0-5V sensor)
+            normalized_voltage = round(voltage / 5.0, 2)
+
+            # Convert to moisture: 0.0 = dry, 1.0 = wet
+            # The sensor outputs lower voltage when wet and higher when dry,
+            # so we invert and remap from the calibrated range to 0.0-1.0.
+            moisture = (SENSOR_DRY - normalized_voltage) / (SENSOR_DRY - SENSOR_WET)
+            normalized_value = round(min(1.0, max(0.0, moisture)), 2)
 
             # Validate the computed value is in expected range
             if not (0.0 <= normalized_value <= 1.0):
