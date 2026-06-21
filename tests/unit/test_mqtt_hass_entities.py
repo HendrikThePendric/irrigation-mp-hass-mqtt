@@ -96,7 +96,6 @@ class TestMqttHassEntities(unittest.TestCase):
             {
                 "name": "Test Location",
                 "valve_pin": 2,
-                "mosfet_pin": 21,
                 "ads_address": "0x48",
                 "ads_channel": 0,
             },

@@ -129,13 +129,11 @@ class MockPointConfig:
         self,
         name: str,
         valve_pin: int,
-        mosfet_pin: int,
         ads_address: int,
         ads_channel: int,
     ) -> None:
         self.name = name
         self.valve_pin = valve_pin
-        self.mosfet_pin = mosfet_pin
         self.ads_address = ads_address
         self.ads_channel = ads_channel
         self.id = name.lower().replace(" ", "")
@@ -204,7 +202,7 @@ class TestIrrigationStationNew(unittest.TestCase):
         logger = MockLogger()
 
         # Add a point to config
-        point_config = MockPointConfig("Test Point", 2, 21, 0x48, 0)
+        point_config = MockPointConfig("Test Point", 2, 0x48, 0)
         config.add_point("testpoint", point_config)
 
         # Create irrigation station
@@ -221,7 +219,7 @@ class TestIrrigationStationNew(unittest.TestCase):
         logger = MockLogger()
 
         # Add a point to config
-        point_config = MockPointConfig("Test Point", 2, 21, 0x48, 0)
+        point_config = MockPointConfig("Test Point", 2, 0x48, 0)
         config.add_point("testpoint", point_config)
 
         # Create irrigation station with mocked point
@@ -249,7 +247,7 @@ class TestIrrigationStationNew(unittest.TestCase):
         logger = MockLogger()
 
         # Add a point to config
-        point_config = MockPointConfig("Test Point", 2, 21, 0x48, 0)
+        point_config = MockPointConfig("Test Point", 2, 0x48, 0)
         config.add_point("testpoint", point_config)
 
         # Create irrigation station with mocked point
@@ -281,8 +279,8 @@ class TestIrrigationStationNew(unittest.TestCase):
         logger = MockLogger()
 
         # Add two points to config
-        point_config1 = MockPointConfig("Test Point 1", 2, 21, 0x48, 0)
-        point_config2 = MockPointConfig("Test Point 2", 3, 22, 0x49, 1)
+        point_config1 = MockPointConfig("Test Point 1", 2, 0x48, 0)
+        point_config2 = MockPointConfig("Test Point 2", 3, 0x49, 1)
         config.add_point("testpoint1", point_config1)
         config.add_point("testpoint2", point_config2)
 
@@ -312,8 +310,8 @@ class TestIrrigationStationNew(unittest.TestCase):
         logger = MockLogger()
 
         # Add two points
-        point_config_a = MockPointConfig("Point A", 2, 21, 0x48, 0)
-        point_config_b = MockPointConfig("Point B", 3, 22, 0x49, 1)
+        point_config_a = MockPointConfig("Point A", 2, 0x48, 0)
+        point_config_b = MockPointConfig("Point B", 3, 0x49, 1)
         config.add_point("pointa", point_config_a)
         config.add_point("pointb", point_config_b)
 
@@ -426,9 +424,9 @@ class TestIrrigationStationProcessInstructionsComprehensive(unittest.TestCase):
         self.logger = MockLogger()
 
         # Add three points to config
-        point_config_a = MockPointConfig("Point A", 2, 21, 0x48, 0)
-        point_config_b = MockPointConfig("Point B", 3, 22, 0x49, 1)
-        point_config_c = MockPointConfig("Point C", 4, 23, 0x4A, 2)
+        point_config_a = MockPointConfig("Point A", 2, 0x48, 0)
+        point_config_b = MockPointConfig("Point B", 3, 0x49, 1)
+        point_config_c = MockPointConfig("Point C", 4, 0x4A, 2)
 
         self.config.add_point("A", point_config_a)
         self.config.add_point("B", point_config_b)

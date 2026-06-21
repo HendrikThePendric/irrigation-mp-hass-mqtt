@@ -115,7 +115,6 @@ class TestConfig(unittest.TestCase):
         conf = {
             "name": "Location A",
             "valve_pin": 2,
-            "mosfet_pin": 21,
             "ads_address": "0x48",
             "ads_channel": 0,
         }
@@ -124,7 +123,6 @@ class TestConfig(unittest.TestCase):
 
         self.assertEqual(point.name, "Location A")
         self.assertEqual(point.valve_pin, 2)
-        self.assertEqual(point.mosfet_pin, 21)
         self.assertEqual(point.ads_address, 0x48)
         self.assertEqual(point.ads_channel, 0)
         self.assertEqual(point.id, "locationa")
@@ -139,7 +137,6 @@ class TestConfig(unittest.TestCase):
                 {
                     "name": "Test",
                     "valve_pin": 2,
-                    "mosfet_pin": 21,
                     "ads_address": "0x99",  # Invalid address
                     "ads_channel": 0,
                 }
@@ -151,7 +148,6 @@ class TestConfig(unittest.TestCase):
                 {
                     "name": "Test",
                     "valve_pin": 2,
-                    "mosfet_pin": 21,
                     "ads_address": "0x48",
                     "ads_channel": 5,  # Invalid channel
                 }

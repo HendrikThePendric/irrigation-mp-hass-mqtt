@@ -26,7 +26,7 @@ This is an irrigation system built on Raspberry Pi Pico with MicroPython. Key co
 
 - **Microcontroller**: Raspberry Pi Pico W (RP2040)
 - **Sensors**: Soil moisture sensors via ADS1115 ADC modules (I2C)
-- **Actuators**: MOSFET switches for sensor power control, relays for valve control
+- **Actuators**: Relays for valve control
 - **Communication**: MQTT over TLS for Home Assistant integration
 - **Power**: 12V DC to 5V USB step-down converter, 220V AC input
 

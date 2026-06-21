@@ -1,5 +1,5 @@
 from umqtt.simple import MQTTClient
-from time import sleep
+from time import sleep, ticks_ms, ticks_diff
 from logger import Logger
 
 
@@ -16,7 +16,7 @@ class MqttRobustClient(MQTTClient):
         port=0,
         user=None,
         password=None,
-        keepalive=0,
+        keepalive=60,
         ssl=None,
         ssl_params={},
         logger: Logger | None = None,
@@ -27,6 +27,7 @@ class MqttRobustClient(MQTTClient):
         )
         self._logger = logger
         self._on_reconnect_callback = on_reconnect_callback
+        self._last_ping = 0
         # Store LWT parameters for reconnection
         self._lwt_topic = None
         self._lwt_msg = None
@@ -44,6 +45,12 @@ class MqttRobustClient(MQTTClient):
             else:
                 self._logger.log(f"mqtt: {e}")
 
+    def _send_keepalive_if_needed(self) -> None:
+        if self.keepalive and self.sock:
+            if ticks_diff(ticks_ms(), self._last_ping) >= self.keepalive * 1000:
+                self.ping()
+                self._last_ping = ticks_ms()
+
     def reconnect(self):
         reconnect_failures = 0
 
@@ -55,6 +62,7 @@ class MqttRobustClient(MQTTClient):
                         self._lwt_topic, self._lwt_msg, self._lwt_retain, self._lwt_qos
                     )
                 result = super().connect(clean_session=False)
+                self._last_ping = ticks_ms()
                 # Call callback to toggle boolean flag (light work only)
                 if self._on_reconnect_callback:
                     self._on_reconnect_callback()
@@ -80,6 +88,7 @@ class MqttRobustClient(MQTTClient):
         """Wait for message with retry and reconnect until reconnect timeout expires"""
         while 1:
             try:
+                self._send_keepalive_if_needed()
                 result = super().wait_msg()
                 return result
             except OSError as e:
@@ -91,6 +100,7 @@ class MqttRobustClient(MQTTClient):
         while attempts:
             self.sock.setblocking(False)
             try:
+                self._send_keepalive_if_needed()
                 result = super().wait_msg()
                 return result
             except OSError as e:
@@ -120,7 +130,9 @@ class MqttRobustClient(MQTTClient):
         i = 1
         while True:
             try:
-                return super().connect(clean_session, timeout)
+                result = super().connect(clean_session, timeout)
+                self._last_ping = ticks_ms()
+                return result
             except OSError as e:
                 self.log(True, e)
                 self.delay(i)

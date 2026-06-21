@@ -202,21 +202,18 @@ class TestIrrigationSystemE2E(unittest.TestCase):
                 {
                     "name": "Location A",
                     "valve_pin": 2,
-                    "mosfet_pin": 21,
                     "ads_address": "0x48",
                     "ads_channel": 0,
                 },
                 {
                     "name": "Location B",
                     "valve_pin": 3,
-                    "mosfet_pin": 22,
                     "ads_address": "0x49",
                     "ads_channel": 1,
                 },
                 {
                     "name": "Location C",
                     "valve_pin": 4,
-                    "mosfet_pin": 26,
                     "ads_address": "0x4A",
                     "ads_channel": 2,
                 },
