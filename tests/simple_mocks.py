@@ -316,7 +316,7 @@ class MockADS1115:
         self.read_calls = []
         self.raw_to_v_calls = []
         self.read_return_value = 1000  # Default raw reading
-        self.voltage_return_value = 2.5  # Default voltage
+        self.voltage_return_value = 1.675  # ~50% moisture with default calibration
 
     def read(self, rate, channel):
         self.read_calls.append((rate, channel))
@@ -414,7 +414,7 @@ class MockADS1x15Module:
             self.read_calls = []
             self.raw_to_v_calls = []
             self.read_return_value = 1000  # Default raw reading
-            self.voltage_return_value = 2.5  # Default voltage
+            self.voltage_return_value = 1.675  # ~50% moisture with default calibration
 
         def read(self, rate, channel):
             self.read_calls.append((rate, channel))

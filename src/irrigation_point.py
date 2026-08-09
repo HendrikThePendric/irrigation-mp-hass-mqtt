@@ -38,3 +38,11 @@ class IrrigationPoint:
     def get_valve_state(self) -> str:
         """Return the current state (open/closed) of the valve."""
         return self._valve.get_state()
+
+    def get_raw_voltage(self) -> float:
+        """Take a single raw voltage reading for calibration."""
+        return self._sensor.get_raw_voltage()
+
+    def update_calibration(self, dry_v: float, wet_v: float) -> None:
+        """Update per-sensor calibration voltages."""
+        self._sensor.update_calibration(dry_v, wet_v)

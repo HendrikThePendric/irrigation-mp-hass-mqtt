@@ -177,6 +177,7 @@ cython_debug/
 config.json
 certs/
 valve_state.json
+calibration.json
 .aider*
 
 log.txt

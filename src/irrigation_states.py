@@ -36,3 +36,38 @@ class SensorState:
 
     def __str__(self) -> str:
         return f"{self.point_id}: {self.moisture:.1%}"
+
+
+class CalibrationCommand:
+    """Set a calibration voltage for a point."""
+
+    def __init__(self, point_id: str, field: str, value: float) -> None:
+        if field not in ("dry_v", "wet_v"):
+            raise ValueError(f"Invalid calibration field: {field}")
+        self.point_id = point_id
+        self.field = field
+        self.value = value
+
+
+class VoltageCommand:
+    """Request a raw voltage measurement for a point."""
+
+    def __init__(self, point_id: str) -> None:
+        self.point_id = point_id
+
+
+class CalibrationState:
+    """Resolved calibration voltages for a point (command result)."""
+
+    def __init__(self, point_id: str, dry_v: float, wet_v: float) -> None:
+        self.point_id = point_id
+        self.dry_v = dry_v
+        self.wet_v = wet_v
+
+
+class VoltageState:
+    """Measured voltage for a point (command result)."""
+
+    def __init__(self, point_id: str, voltage: float) -> None:
+        self.point_id = point_id
+        self.voltage = voltage

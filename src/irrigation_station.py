@@ -4,7 +4,14 @@ from config import Config
 from irrigation_point import IrrigationPoint
 from valve import Valve
 from logger import Logger
-from irrigation_states import ValveState, SensorState
+from irrigation_states import (
+    CalibrationCommand,
+    CalibrationState,
+    SensorState,
+    ValveState,
+    VoltageCommand,
+    VoltageState,
+)
 from open_valve_persister import OpenValvePersister
 import time
 
@@ -175,6 +182,53 @@ class IrrigationStation:
             return ValveState(open_point_id, Valve.STATE_CLOSED)
 
         return None
+
+    def update_point_calibration(
+        self, point_id: str, dry_v: float | None = None, wet_v: float | None = None
+    ) -> None:
+        """Update calibration voltages for a point and persist to calibration.json."""
+        if point_id not in self._points:
+            raise ValueError(f"Unknown irrigation point: {point_id}")
+        point = self._points[point_id]
+        new_dry = dry_v if dry_v is not None else point.config.dry_voltage
+        new_wet = wet_v if wet_v is not None else point.config.wet_voltage
+
+        self._config.update_calibration(point_id, dry_v, wet_v)
+        point.update_calibration(new_dry, new_wet)
+        self._logger.log(
+            f"[Calibration] {point_id}: dry={new_dry}V wet={new_wet}V"
+        )
+
+    def get_point_voltage(self, point_id: str) -> float:
+        """Take a raw voltage reading from a specific point."""
+        if point_id not in self._points:
+            raise ValueError(f"Unknown irrigation point: {point_id}")
+        return self._points[point_id].get_raw_voltage()
+
+    def process_calibration(
+        self, commands: list[CalibrationCommand]
+    ) -> list[CalibrationState]:
+        """Apply calibration commands and return resulting calibration states."""
+        results: list[CalibrationState] = []
+        for cmd in commands:
+            dry_v = cmd.value if cmd.field == "dry_v" else None
+            wet_v = cmd.value if cmd.field == "wet_v" else None
+            self.update_point_calibration(cmd.point_id, dry_v, wet_v)
+            point = self._config.irrigation_points[cmd.point_id]
+            results.append(
+                CalibrationState(cmd.point_id, point.dry_voltage, point.wet_voltage)
+            )
+        return results
+
+    def process_voltage_commands(
+        self, commands: list[VoltageCommand]
+    ) -> list[VoltageState]:
+        """Take voltage readings for requested points."""
+        results: list[VoltageState] = []
+        for cmd in commands:
+            voltage = self.get_point_voltage(cmd.point_id)
+            results.append(VoltageState(cmd.point_id, voltage))
+        return results
 
     def _setup_ads_modules(self) -> None:
         """Deduplicate ADS addresses and initialize ADS modules."""

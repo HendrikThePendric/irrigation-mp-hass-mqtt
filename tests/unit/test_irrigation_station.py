@@ -117,9 +117,15 @@ class MockConfig:
         self.publish_interval = 300  # 5 minutes in seconds
         self.measurement_interval = 100  # 100 seconds
         self.max_valve_open_time = 45 * 60  # 45 minutes in seconds
+        self.calibration_updates: list[tuple] = []
 
     def add_point(self, point_id: str, point_config) -> None:
         self.irrigation_points[point_id] = point_config
+
+    def update_calibration(
+        self, point_id: str, dry_v: float | None = None, wet_v: float | None = None
+    ) -> None:
+        self.calibration_updates.append((point_id, dry_v, wet_v))
 
 
 class MockPointConfig:
@@ -139,6 +145,8 @@ class MockPointConfig:
         self.id = name.lower().replace(" ", "")
         self.rolling_window = 3
         self.ema_alpha = 0.2
+        self.dry_voltage: float = 2.4
+        self.wet_voltage: float = 0.95
 
 
 class MockIrrigationPoint:
@@ -150,6 +158,30 @@ class MockIrrigationPoint:
         self.sensor_value = 0.5
         self.open_count = 0
         self.close_count = 0
+        self.calibration_updates: list[tuple[float, float]] = []
+        self.raw_voltage_calls: int = 0
+        self.raw_voltage_return = 1.387
+        # config-like attributes needed by calibration
+        self.config = self
+
+    _dry_voltage: float | None
+    _wet_voltage: float | None
+
+    @property
+    def dry_voltage(self) -> float | None:
+        return getattr(self, "_dry_voltage", None)
+
+    @dry_voltage.setter
+    def dry_voltage(self, value: float | None) -> None:
+        self._dry_voltage = value
+
+    @property
+    def wet_voltage(self) -> float | None:
+        return getattr(self, "_wet_voltage", None)
+
+    @wet_voltage.setter
+    def wet_voltage(self, value: float | None) -> None:
+        self._wet_voltage = value
 
     def get_sensor_value(self) -> float:
         return self.sensor_value
@@ -167,6 +199,13 @@ class MockIrrigationPoint:
 
     def get_valve_state(self) -> str:
         return self.valve_state
+
+    def get_raw_voltage(self) -> float:
+        self.raw_voltage_calls += 1
+        return self.raw_voltage_return
+
+    def update_calibration(self, dry_v: float, wet_v: float) -> None:
+        self.calibration_updates.append((dry_v, wet_v))
 
     def reset_counts(self) -> None:
         """Reset operation counts for testing."""

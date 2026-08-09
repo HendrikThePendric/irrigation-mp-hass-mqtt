@@ -72,6 +72,8 @@ class MockConfig:
         self.ads_channel = ads_channel
         self.rolling_window = 3
         self.ema_alpha = 0.2
+        self.dry_voltage: float = 2.4
+        self.wet_voltage: float = 0.95
 
 
 class MockLogger:
@@ -165,6 +167,33 @@ class TestIrrigationPoint(unittest.TestCase):
         # Test measuring sensor
         point.measure_sensor()
         self.assertTrue(len(mock_machine.pins_created) > 0)
+
+    def test_irrigation_point_get_raw_voltage(self) -> None:
+        """Test get_raw_voltage passthrough."""
+        config = MockConfig("Test Point", 2, 0)
+        ads = ADS1115Module.ADS1115()
+        logger = MockLogger()
+
+        ads.voltage_return_value = 1.387
+        point = IrrigationPoint(config, ads, logger)  # type: ignore
+
+        voltage = point.get_raw_voltage()
+        self.assertAlmostEqual(voltage, 1.387, places=3)
+
+    def test_irrigation_point_update_calibration(self) -> None:
+        """Test update_calibration passthrough."""
+        config = MockConfig("Test Point", 2, 0)
+        ads = ADS1115Module.ADS1115()
+        logger = MockLogger()
+
+        ads.voltage_return_value = 1.981
+        point = IrrigationPoint(config, ads, logger)  # type: ignore
+
+        point.update_calibration(2.704, 1.258)
+
+        # 1.981V should give 50% for this range
+        point.measure_sensor()
+        self.assertAlmostEqual(point.get_sensor_value(), 0.5, places=1)
 
 
 if __name__ == "__main__":

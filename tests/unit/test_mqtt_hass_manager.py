@@ -14,7 +14,7 @@ from simple_mocks import (
     mock_os,
     mock_ntptime,
     mock_time,
-    mock_ads1115,
+    mock_ads1x15,
     mock_ssl_context,
     mock_umqtt_simple,
 )
@@ -25,6 +25,7 @@ class MachineModule:
     Pin = mock_machine.Pin
     unique_id = mock_machine.unique_id
     RTC = type("MockRTC", (), {"datetime": lambda self: (2024, 1, 1, 0, 0, 0, 0, 0)})
+    I2C = type("MockI2C", (), {"__init__": lambda self, *args, **kwargs: None})
     reset = lambda: None
 
 
@@ -33,7 +34,7 @@ sys.modules["machine"] = MachineModule()
 sys.modules["os"] = mock_os
 sys.modules["ntptime"] = mock_ntptime
 sys.modules["time"] = mock_time
-sys.modules["ads1x15"] = mock_ads1115
+sys.modules["ads1x15"] = mock_ads1x15
 
 
 # Mock SSL module
@@ -98,6 +99,8 @@ class MockPointConfig:
         self.ads_address = ads_address
         self.ads_channel = ads_channel
         self.id = name.lower().replace(" ", "")
+        self.dry_voltage: float = 2.4
+        self.wet_voltage: float = 0.95
 
 
 class MockLogger:
@@ -113,9 +116,14 @@ class MockLogger:
 class TestMqttHassManagerNew(unittest.TestCase):
     """Test MqttHassManager class with new API."""
 
+    def setUp(self) -> None:
+        """Reset mock state before each test."""
+        from simple_mocks import MockMQTTClient
+
+        MockMQTTClient.reset_instances()
+
     def test_create_ssl_context(self) -> None:
         """Test create_ssl_context function."""
-        # This is a simple test that just checks the function exists
         ssl_context = create_ssl_context()
         self.assertIsNotNone(ssl_context)
 
@@ -126,7 +134,6 @@ class TestMqttHassManagerNew(unittest.TestCase):
 
         manager = MqttHassManager(config, logger)  # type: ignore
 
-        # Check that client was created
         self.assertIsNotNone(manager._client)
         self.assertEqual(manager._config, config)
         self.assertEqual(manager._logger, logger)
@@ -139,7 +146,6 @@ class TestMqttHassManagerNew(unittest.TestCase):
         manager = MqttHassManager(config, logger)  # type: ignore
         manager.setup()
 
-        # Check that client is connected
         self.assertTrue(manager._client.connected)
 
     def test_mqtt_hass_manager_get_station_instructions(self) -> None:
@@ -150,23 +156,18 @@ class TestMqttHassManagerNew(unittest.TestCase):
         manager = MqttHassManager(config, logger)  # type: ignore
         manager.setup()
 
-        # Simulate receiving valve commands (now stored as ValveState objects)
         manager._pending_valve_commands = [
             ValveState("pointa", "open"),
             ValveState("pointb", "closed"),
         ]
 
-        # Get station instructions
         commands = manager.get_station_instructions()
 
-        # Should return all pending valve commands
         self.assertEqual(len(commands), 2)
         self.assertEqual(commands[0].point_id, "pointa")
         self.assertEqual(commands[0].state, "open")
         self.assertEqual(commands[1].point_id, "pointb")
         self.assertEqual(commands[1].state, "closed")
-
-        # Pending commands should be cleared after getting them
         self.assertEqual(len(manager._pending_valve_commands), 0)
 
     def test_mqtt_hass_manager_publish_valve_states(self) -> None:
@@ -177,20 +178,16 @@ class TestMqttHassManagerNew(unittest.TestCase):
         manager = MqttHassManager(config, logger)  # type: ignore
         manager.setup()
 
-        # Clear published messages
         manager._client.published_messages.clear()
 
-        # Publish valve states
         valve_states = [
             ValveState("pointa", "open"),
             ValveState("pointb", "closed"),
         ]
         manager.publish_valve_states(valve_states)
 
-        # Check that messages were published
         self.assertEqual(len(manager._client.published_messages), 2)
 
-        # Check topics and messages
         topics = [msg[0] for msg in manager._client.published_messages]
         messages = [msg[1] for msg in manager._client.published_messages]
 
@@ -207,27 +204,22 @@ class TestMqttHassManagerNew(unittest.TestCase):
         manager = MqttHassManager(config, logger)  # type: ignore
         manager.setup()
 
-        # Clear published messages
         manager._client.published_messages.clear()
 
-        # Publish sensor states
         sensor_states = [
             SensorState("pointa", 0.65),
             SensorState("pointb", 0.35),
         ]
         manager.publish_sensor_states(sensor_states)
 
-        # Check that messages were published
         self.assertEqual(len(manager._client.published_messages), 2)
 
-        # Check topics and messages
         topics = [msg[0] for msg in manager._client.published_messages]
         messages = [msg[1] for msg in manager._client.published_messages]
 
         self.assertIn("irrigation/teststation/pointa/sensor", topics)
         self.assertIn("irrigation/teststation/pointb/sensor", topics)
 
-        # Check that moisture values were converted to percentages
         self.assertTrue(any('"moisture": 65.0' in msg for msg in messages))
         self.assertTrue(any('"moisture": 35.0' in msg for msg in messages))
 
@@ -239,16 +231,12 @@ class TestMqttHassManagerNew(unittest.TestCase):
         manager = MqttHassManager(config, logger)  # type: ignore
         manager.setup()
 
-        # Clear published messages
         manager._client.published_messages.clear()
 
-        # Test broker connectivity
         manager.test_broker_connectivity()
 
-        # Should publish a test message
         self.assertTrue(len(manager._client.published_messages) > 0)
 
-        # Check that it published to the broker connectivity topic
         self.assertTrue(
             any(
                 topic.startswith("irrigation/teststation/broker_connectivity")
@@ -264,8 +252,43 @@ class TestMqttHassManagerNew(unittest.TestCase):
         manager = MqttHassManager(config, logger)  # type: ignore
         manager.setup()
 
-        # Call process_messages (should not raise exceptions)
         manager.process_messages()
+
+    def test_handle_calibration_set(self) -> None:
+        """Test handling calibration dry_v/set message stores command."""
+        config = MockConfig()
+        logger = MockLogger()
+
+        manager = MqttHassManager(config, logger)  # type: ignore
+        manager.setup()
+
+        topic = b"irrigation/teststation/pointa/calibration/dry_v/set"
+        msg = b"2.704"
+
+        manager._handle_message(topic, msg)
+
+        commands = manager.get_calibration_commands()
+        self.assertEqual(len(commands), 1)
+        self.assertEqual(commands[0].point_id, "pointa")
+        self.assertEqual(commands[0].field, "dry_v")
+        self.assertAlmostEqual(commands[0].value, 2.704, places=3)
+
+    def test_handle_voltage_measure(self) -> None:
+        """Test handling voltage/measure message stores command."""
+        config = MockConfig()
+        logger = MockLogger()
+
+        manager = MqttHassManager(config, logger)  # type: ignore
+        manager.setup()
+
+        topic = b"irrigation/teststation/pointa/voltage/measure"
+        msg = b"measure"
+
+        manager._handle_message(topic, msg)
+
+        commands = manager.get_voltage_commands()
+        self.assertEqual(len(commands), 1)
+        self.assertEqual(commands[0].point_id, "pointa")
 
 
 if __name__ == "__main__":

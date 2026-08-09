@@ -108,6 +108,20 @@ class FirmwareController:
             valve_updates = self._station.process_instructions(valve_commands)
             self._mqtt_manager.publish_valve_states(valve_updates)
 
+        # Process calibration commands
+        calibration_commands = self._mqtt_manager.get_calibration_commands()
+        if calibration_commands:
+            calibration_states = self._station.process_calibration(
+                calibration_commands
+            )
+            self._mqtt_manager.publish_calibration_states(calibration_states)
+
+        # Process voltage measurement commands
+        voltage_commands = self._mqtt_manager.get_voltage_commands()
+        if voltage_commands:
+            voltage_states = self._station.process_voltage_commands(voltage_commands)
+            self._mqtt_manager.publish_voltage_states(voltage_states)
+
         # Check for valve timeout
         if self._scheduler.valve_timeout_check.is_due():
             valve_update = self._station.check_valve_timeout()

@@ -70,6 +70,8 @@ class MockConfig:
         self.ads_channel = ads_channel
         self.rolling_window = 3
         self.ema_alpha = 0.2
+        self.dry_voltage: float = 2.4
+        self.wet_voltage: float = 0.95
 
 
 class MockLogger:
@@ -226,6 +228,34 @@ class TestSensor(unittest.TestCase):
         sensor._value = 0.75
         value = sensor.get_value()
         self.assertEqual(value, 0.75)
+
+    def test_sensor_get_raw_voltage(self) -> None:
+        """Test raw voltage reading bypasses rolling average."""
+        config = MockConfig("Test Sensor", 0)
+        ads = ADS1115Module.ADS1115()
+        logger = MockLogger()
+
+        sensor = Sensor(config, ads, logger)  # type: ignore
+
+        ads.voltage_return_value = 1.387
+        voltage = sensor.get_raw_voltage()
+        self.assertAlmostEqual(voltage, 1.387, places=3)
+
+    def test_sensor_update_calibration(self) -> None:
+        """Test runtime calibration update."""
+        config = MockConfig("Test Sensor", 0)
+        ads = ADS1115Module.ADS1115()
+        logger = MockLogger()
+
+        sensor = Sensor(config, ads, logger)  # type: ignore
+
+        sensor.update_calibration(2.704, 1.258)
+
+        # 1.981V should give 50% moisture for this calibration range
+        # (2.704 - 1.981) / (2.704 - 1.258) = 0.723 / 1.446 = 0.5
+        ads.voltage_return_value = 1.981
+        sensor.measure()
+        self.assertAlmostEqual(sensor.get_value(), 0.5, places=1)
 
 
 if __name__ == "__main__":

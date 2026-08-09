@@ -1,5 +1,11 @@
 import re
-from json import load
+from json import dump, load
+
+# Default calibration voltages (in volts) for soil moisture sensors.
+# These match the SENSOR_DRY / SENSOR_WET constants in sensor.py.
+# Used as fallback when calibration.json has no entry for a point.
+_DEFAULT_DRY_V: float = 2.4  # 0.48 normalized * 5.0
+_DEFAULT_WET_V: float = 0.95  # 0.19 normalized * 5.0
 from machine import unique_id
 
 
@@ -95,6 +101,9 @@ class IrrigationPointConfig:
         # These will be set from global config
         self.rolling_window: int = 5
         self.ema_alpha: float = 0.2
+        # Sensor calibration voltages — set by Config from calibration.json
+        self.dry_voltage: float | None = None
+        self.wet_voltage: float | None = None
 
 
 class Config:
@@ -151,6 +160,54 @@ class Config:
             irrigation_point.rolling_window = self.rolling_window
             irrigation_point.ema_alpha = self.ema_alpha
             self.irrigation_points[irrigation_point.id] = irrigation_point
+
+        self._load_calibration()
+
+    def _load_calibration(self) -> None:
+        """Load per-point calibration from calibration.json, falling back to defaults."""
+        self._calibration_data: dict[str, dict[str, float]] = {}
+        try:
+            with open("calibration.json") as f:
+                file_data: dict = load(f)
+        except Exception:
+            file_data = {}
+
+        for point_id, point in self.irrigation_points.items():
+            cal = file_data.get(point_id, {})
+            dry = cal.get("dry_v")
+            wet = cal.get("wet_v")
+
+            point.dry_voltage = float(dry) if dry is not None else _DEFAULT_DRY_V
+            point.wet_voltage = float(wet) if wet is not None else _DEFAULT_WET_V
+
+            if point_id in file_data:
+                self._calibration_data[point_id] = {
+                    k: float(v) for k, v in file_data[point_id].items()
+                }
+
+    def update_calibration(
+        self, point_id: str, dry_v: float | None = None, wet_v: float | None = None
+    ) -> None:
+        """Update calibration voltages for a point and persist to calibration.json."""
+        if point_id not in self.irrigation_points:
+            raise ValueError(f"Unknown irrigation point: {point_id}")
+        point = self.irrigation_points[point_id]
+        if dry_v is not None:
+            point.dry_voltage = dry_v
+        if wet_v is not None:
+            point.wet_voltage = wet_v
+        if point_id not in self._calibration_data:
+            self._calibration_data[point_id] = {}
+        if dry_v is not None:
+            self._calibration_data[point_id]["dry_v"] = dry_v
+        if wet_v is not None:
+            self._calibration_data[point_id]["wet_v"] = wet_v
+        self._save_calibration()
+
+    def _save_calibration(self) -> None:
+        """Write current calibration data to calibration.json."""
+        with open("calibration.json", "w") as f:
+            dump(self._calibration_data, f)
 
     def __str__(self) -> str:
         lines: list[str] = [

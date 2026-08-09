@@ -134,18 +134,31 @@ echo ""
 
 # Install required packages via mip
 echo "Installing required packages..."
-PACKAGES=("unittest" "collections" "datetime" "typing")
+PACKAGES=(unittest collections datetime)
+SPECIAL_PACKAGES=("github:josverl/micropython-stubs/mip/typing.mpy:typing")
 
 for pkg in "${PACKAGES[@]}"; do
     echo "  Installing $pkg..."
-    # Run mip.install and capture output
     INSTALL_OUTPUT=$("$MICROPYTHON_BINARY" -c "import mip; mip.install('$pkg')" 2>&1)
-    
-    # Check for success indicators in output
-    if echo "$INSTALL_OUTPUT" | grep -q "Exists\|Done\|Package may be partially installed"; then
+
+    if echo "$INSTALL_OUTPUT" | grep -q "Exists\|Done"; then
         echo "  ✓ $pkg installed/available"
     else
         echo "❌ Failed to install $pkg"
+        echo "  Output: $INSTALL_OUTPUT"
+        exit 1
+    fi
+done
+
+for pkg_spec in "${SPECIAL_PACKAGES[@]}"; do
+    IFS=":" read -r source name <<< "$pkg_spec"
+    echo "  Installing $name from $source..."
+    INSTALL_OUTPUT=$("$MICROPYTHON_BINARY" -c "import mip; mip.install('$source')" 2>&1)
+
+    if echo "$INSTALL_OUTPUT" | grep -q "Done"; then
+        echo "  ✓ $name installed/available"
+    else
+        echo "❌ Failed to install $name"
         echo "  Output: $INSTALL_OUTPUT"
         exit 1
     fi

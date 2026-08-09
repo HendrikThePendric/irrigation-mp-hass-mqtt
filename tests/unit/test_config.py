@@ -130,6 +130,8 @@ class TestConfig(unittest.TestCase):
         # Check default values
         self.assertEqual(point.rolling_window, 5)
         self.assertAlmostEqual(point.ema_alpha, 0.2)
+        self.assertIsNone(point.dry_voltage)
+        self.assertIsNone(point.wet_voltage)
 
         # Test invalid ADS address
         with self.assertRaises(ValueError):
@@ -196,6 +198,88 @@ class TestConfig(unittest.TestCase):
         # Check __str__ method
         str_repr = str(config)
         self.assertTrue(str_repr.startswith("Irrigation station config:"))
+
+    def test_calibration_defaults_are_none(self) -> None:
+        """Test that calibration voltages fall back to defaults when no file exists."""
+        import os
+
+        try:
+            os.remove("calibration.json")
+        except OSError:
+            pass
+
+        config = Config("tests/fixtures/test_config.json")
+        point = config.irrigation_points.get("locationa")
+        self.assertIsNotNone(point)
+        if point:
+            self.assertAlmostEqual(point.dry_voltage, 2.4, places=1)
+            self.assertAlmostEqual(point.wet_voltage, 0.95, places=2)
+
+    def test_update_calibration_in_memory(self) -> None:
+        """Test update_calibration updates in-memory values and writes file."""
+        import os
+
+        config_path = "tests/fixtures/test_config.json"
+        cal_path = "calibration.json"
+
+        try:
+            os.remove(cal_path)
+        except OSError:
+            pass
+
+        config = Config(config_path)
+
+        config.update_calibration("locationa", dry_v=2.704, wet_v=1.258)
+        point_a = config.irrigation_points.get("locationa")
+        self.assertIsNotNone(point_a)
+        if point_a:
+            self.assertAlmostEqual(point_a.dry_voltage, 2.704, places=3)
+            self.assertAlmostEqual(point_a.wet_voltage, 1.258, places=3)
+
+        config.update_calibration("locationa", dry_v=3.0)
+        if point_a:
+            self.assertAlmostEqual(point_a.dry_voltage, 3.0, places=1)
+            self.assertAlmostEqual(point_a.wet_voltage, 1.258, places=3)
+
+        try:
+            os.remove(cal_path)
+        except OSError:
+            pass
+
+    def test_calibration_loads_from_file(self) -> None:
+        """Test that Config loads calibration from calibration.json."""
+        import os
+        import json as _json
+
+        cal_path = "calibration.json"
+
+        try:
+            os.remove(cal_path)
+        except OSError:
+            pass
+
+        cal_data = {"locationa": {"dry_v": 2.5, "wet_v": 1.0}}
+        with open(cal_path, "w") as f:
+            _json.dump(cal_data, f)
+
+        config = Config("tests/fixtures/test_config.json")
+
+        point_a = config.irrigation_points.get("locationa")
+        self.assertIsNotNone(point_a)
+        if point_a:
+            self.assertAlmostEqual(point_a.dry_voltage, 2.5, places=3)
+            self.assertAlmostEqual(point_a.wet_voltage, 1.0, places=3)
+
+        point_b = config.irrigation_points.get("locationb")
+        self.assertIsNotNone(point_b)
+        if point_b:
+            self.assertAlmostEqual(point_b.dry_voltage, 2.4, places=1)
+            self.assertAlmostEqual(point_b.wet_voltage, 0.95, places=2)
+
+        try:
+            os.remove(cal_path)
+        except OSError:
+            pass
 
 
 if __name__ == "__main__":
