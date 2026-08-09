@@ -302,7 +302,7 @@ class MqttHassManager:
             try:
                 value = float(msg.strip())
                 self._pending_calibration_commands.append(
-                    CalibrationCommand(point_id, action.split("/")[-2], value)
+                    CalibrationCommand(point_id, action.split("/")[1], value)
                 )
             except ValueError:
                 self._logger.log(f"Invalid calibration value: {msg}")
