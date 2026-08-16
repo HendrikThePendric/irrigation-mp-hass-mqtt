@@ -12,6 +12,7 @@ from irrigation_states import (
 )
 
 from mqtt_hass_entities import MqttHassSensor, MqttHassValve, MessagerParams
+from json import dumps, loads
 from machine import reset
 from os import rename
 from ssl import SSLContext, PROTOCOL_TLS_CLIENT
@@ -282,13 +283,22 @@ class MqttHassManager:
             self._logger.log(f"Failed to subscribe to {topic}: {e}")
 
     def _publish_config_current(self) -> None:
-        """Publish the loaded config file contents (retained) for verification."""
+        """Publish the loaded config (retained) for verification.
+
+        WiFi credentials are redacted before publishing so secrets are not
+        exposed in a retained MQTT topic.
+        """
         try:
             with open(self._config_path) as f:
                 config_text = f.read()
+            conf = loads(config_text)
+            network = conf.get("network")
+            if isinstance(network, dict):
+                network["wifi_ssid"] = "REDACTED"
+                network["wifi_password"] = "REDACTED"
             self._client.publish(
                 self._topic("config/current"),
-                config_text,
+                dumps(conf),
                 retain=True,
             )
         except Exception as e:

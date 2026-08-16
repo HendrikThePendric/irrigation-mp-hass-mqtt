@@ -197,24 +197,34 @@ class TestMqttHassManagerNew(unittest.TestCase):
         self.assertIn("irrigation/teststation/config/set", manager._client.subscribe_calls)
 
     def test_boot_echo_publishes_config_current(self) -> None:
-        """Test setup publishes the loaded config to config/current (retained)."""
+        """Test setup publishes the loaded config to config/current with secrets redacted."""
         config = MockConfig()
         logger = MockLogger()
 
         manager = MqttHassManager(config, logger)  # type: ignore
 
-        file_writes["./config.json"] = '{"station_name": "Test Station"}'
+        file_writes["./config.json"] = (
+            '{"station_name": "Test Station", "network": {'
+            '"wifi_ssid": "MySSID", "wifi_password": "MySecret"}}'
+        )
 
         manager.setup()
 
-        self.assertTrue(
-            any(
-                topic == "irrigation/teststation/config/current"
-                and message == '{"station_name": "Test Station"}'
-                and retain is True
-                for topic, message, retain, qos in manager._client.published_messages
-            )
-        )
+        import json
+
+        echoed = None
+        retain = False
+        for topic, message, _retain, _qos in manager._client.published_messages:
+            if topic == "irrigation/teststation/config/current":
+                echoed = message
+                retain = _retain
+
+        self.assertIsNotNone(echoed)
+        self.assertTrue(retain)
+        parsed = json.loads(echoed)
+        self.assertEqual(parsed["station_name"], "Test Station")
+        self.assertEqual(parsed["network"]["wifi_ssid"], "REDACTED")
+        self.assertEqual(parsed["network"]["wifi_password"], "REDACTED")
 
     def test_mqtt_hass_manager_get_station_instructions(self) -> None:
         """Test get_station_instructions method."""
