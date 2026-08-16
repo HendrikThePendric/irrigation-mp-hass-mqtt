@@ -12,7 +12,7 @@ The station connects to the MQTT broker over TLS (port 8883) with client certifi
 | `irrigation/{station_id}/{point_id}/valve/set` | Subscribe | Valve open/close commands |
 | `irrigation/{station_id}/broker_connectivity` | Publish | Connectivity test messages |
 | `irrigation/{station_id}/config/set` | Subscribe | Command to overwrite `config.json` and reboot |
-| `irrigation/{station_id}/config/current` | Publish | Echo of the loaded `config.json` after boot (retained, secrets redacted) |
+| `irrigation/{station_id}/config/current` | Publish | Human-readable config summary after boot (retained) |
 | `homeassistant/sensor/{station_id}-{point_id}/config` | Publish | HA sensor discovery |
 | `homeassistant/valve/{station_id}-{point_id}/config` | Publish | HA valve discovery |
 | `homeassistant/status` | Subscribe | HA restart detection |
@@ -120,11 +120,11 @@ When Home Assistant publishes `"online"` (after a restart), the station re-publi
 
 **Topic:** `irrigation/{station_id}/config/set`
 
-Payload: the full `config.json` contents. On receipt, the station atomically overwrites `config.json` and reboots. After boot it republishes the loaded config to `config/current` (retained) for verification, with `network.wifi_ssid` and `network.wifi_password` redacted to `"REDACTED"` so credentials are not persisted on the broker.
+Payload: the full `config.json` contents. On receipt, the station atomically overwrites `config.json` and reboots. After boot it republishes a human-readable summary of the loaded config to `config/current` (retained). The summary omits the WiFi password.
 
 **Topic:** `irrigation/{station_id}/config/current`
 
-Payload: the loaded `config.json` (WiFi credentials redacted). Retained. Used by `scripts/send_config.sh` to verify a config update was applied.
+Payload: the `str(config)` summary (WiFi password omitted). Retained. Used by `scripts/send_config.sh` to confirm a config update was applied and to show the loaded configuration.
 
 ## Reconnection behavior
 
