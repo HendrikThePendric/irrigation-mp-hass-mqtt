@@ -4,9 +4,17 @@
 # Usage:
 #   ./scripts/send_config.sh [path-to-config.json]
 #
-# Publishes the config file to the station's config/set topic, waits for the
-# device to reboot, and verifies the device loaded the exact file by comparing
-# the retained config/current echo (WiFi credentials are redacted in the echo).
+# Publishes the config file to the station's config/set topic, then waits for
+# the device to reboot and republish its config summary (config/current), and
+# prints that summary so the change can be verified.
+#
+# Exit code 0 on success (sent + rebooted + summary printed), non-zero on
+# failure. Output is deterministic so it can be driven by automation.
+#
+# Environment overrides:
+#   MQTT_BROKER  - broker host (default: network.mqtt_broker_ip from config.json)
+#   MQTT_PORT    - broker port (default: 8883)
+#   STATION_ID   - station_id to target (default: auto-discovered)
 
 set -euo pipefail
 
@@ -34,7 +42,7 @@ mosquitto_cmd() {
 }
 
 require_mosquitto() {
-    if ! command -v mosquitto_pub &> /dev/null; then
+    if ! command -v mosquitto_pub &> /dev/null || ! command -v mosquitto_sub &> /dev/null; then
         echo "ERROR: mosquitto-clients not installed." >&2
         echo "Run: sudo apt install mosquitto-clients" >&2
         exit 1
@@ -51,9 +59,15 @@ get_broker() {
         echo "Set MQTT_BROKER to override." >&2
         exit 1
     fi
+    echo "Broker: $BROKER (from $CONFIG_FILE)" >&2
+    echo "If you changed mqtt_broker_ip, set MQTT_BROKER to the device's current broker." >&2
 }
 
 discover_station_id() {
+    if [ -n "${STATION_ID:-}" ]; then
+        echo "$STATION_ID"
+        return
+    fi
     if [ -f "$CACHE_FILE" ]; then
         cat "$CACHE_FILE"
         return
@@ -76,34 +90,9 @@ discover_station_id() {
     echo "$sid"
 }
 
-verify_config() {
+show_config() {
     local sid="$1"
-    local current
-    current=$(mosquitto_cmd sub -t "irrigation/${sid}/config/current" -C 1 --retained-only -F '%p' 2>/dev/null || true)
-    if [ -z "$current" ]; then
-        return 1
-    fi
-    local tmp
-    tmp=$(mktemp)
-    printf '%s\n' "$current" > "$tmp"
-    if python3 -c '
-import json, sys
-def redact(conf):
-    net = conf.get("network")
-    if isinstance(net, dict):
-        net["wifi_ssid"] = "REDACTED"
-        net["wifi_password"] = "REDACTED"
-    return conf
-sent = redact(json.load(open(sys.argv[1])))
-got = redact(json.load(open(sys.argv[2])))
-sys.exit(0 if sent == got else 1)
-' "$CONFIG_FILE" "$tmp" 2>/dev/null; then
-        rm -f "$tmp"
-        return 0
-    else
-        rm -f "$tmp"
-        return 1
-    fi
+    mosquitto_cmd sub -t "irrigation/${sid}/config/current" -C 1 --retained-only -F '%p' 2>/dev/null || true
 }
 
 main() {
@@ -118,29 +107,28 @@ main() {
     local sid
     sid=$(discover_station_id)
 
+    local old
+    old=$(show_config "$sid")
+
     echo "Sending $CONFIG_FILE to station $sid..."
     mosquitto_cmd pub -t "irrigation/${sid}/config/set" -f "$CONFIG_FILE"
 
-    echo "Waiting for device to reboot and confirm..."
-    local confirmed=0
+    echo "Waiting for device to reboot and apply..."
+    local new
     for _ in $(seq 1 60); do
-        if verify_config "$sid"; then
-            confirmed=1
-            break
+        new=$(show_config "$sid")
+        if [ -n "$new" ] && [ "$new" != "$old" ]; then
+            echo "OK: device rebooted with the new config."
+            echo "----------------------------------------"
+            echo "$new"
+            echo "----------------------------------------"
+            exit 0
         fi
         sleep 1
     done
 
-    if [ "$confirmed" -eq 1 ]; then
-        local station_name
-        station_name=$(python3 -c "import json,sys; print(json.load(open(sys.argv[1]))['station_name'])" "$CONFIG_FILE" 2>/dev/null || echo "?")
-        echo "OK: config applied and verified."
-        echo "    station_name: $station_name"
-        exit 0
-    else
-        echo "FAILED: device did not confirm the new config within 60s." >&2
-        exit 1
-    fi
+    echo "FAILED: device did not confirm the new config within 60s." >&2
+    exit 1
 }
 
 main "$@"

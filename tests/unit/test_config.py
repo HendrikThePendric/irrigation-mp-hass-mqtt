@@ -199,6 +199,12 @@ class TestConfig(unittest.TestCase):
         str_repr = str(config)
         self.assertTrue(str_repr.startswith("Irrigation station config:"))
 
+    def test_str_omits_wifi_password(self) -> None:
+        """Test that __str__ never includes the WiFi password (published over MQTT)."""
+        config = Config("tests/fixtures/test_config.json")
+        str_repr = str(config)
+        self.assertFalse("secret123" in str_repr)
+
     def test_calibration_defaults_are_none(self) -> None:
         """Test that calibration voltages fall back to defaults when no file exists."""
         import os

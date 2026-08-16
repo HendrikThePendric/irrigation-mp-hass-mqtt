@@ -1,6 +1,6 @@
 from mqtt_robust_client import MqttRobustClient
 
-from config import Config
+from config import CONFIG_FILE_PATH, Config
 from logger import Logger
 from irrigation_states import (
     ValveState,
@@ -12,7 +12,6 @@ from irrigation_states import (
 )
 
 from mqtt_hass_entities import MqttHassSensor, MqttHassValve, MessagerParams
-from json import dumps, loads
 from machine import reset
 from os import rename
 from ssl import SSLContext, PROTOCOL_TLS_CLIENT
@@ -43,11 +42,9 @@ class MqttHassManager:
         self,
         config: Config,
         logger: Logger,
-        config_path: str = "./config.json",
     ) -> None:
         self._config = config
         self._logger = logger
-        self._config_path = config_path
         self._pending_valve_commands: list[ValveState] = []
         self._pending_calibration_commands: list[CalibrationCommand] = []
         self._pending_voltage_commands: list[VoltageCommand] = []
@@ -283,22 +280,11 @@ class MqttHassManager:
             self._logger.log(f"Failed to subscribe to {topic}: {e}")
 
     def _publish_config_current(self) -> None:
-        """Publish the loaded config (retained) for verification.
-
-        WiFi credentials are redacted before publishing so secrets are not
-        exposed in a retained MQTT topic.
-        """
+        """Publish the loaded config summary (retained) for verification."""
         try:
-            with open(self._config_path) as f:
-                config_text = f.read()
-            conf = loads(config_text)
-            network = conf.get("network")
-            if isinstance(network, dict):
-                network["wifi_ssid"] = "REDACTED"
-                network["wifi_password"] = "REDACTED"
             self._client.publish(
                 self._topic("config/current"),
-                dumps(conf),
+                str(self._config),
                 retain=True,
             )
         except Exception as e:
@@ -378,11 +364,11 @@ class MqttHassManager:
 
     def _handle_config_set(self, msg: str) -> None:
         """Overwrite config.json with the received payload, then reboot."""
-        tmp_path = self._config_path + ".tmp"
+        tmp_path = CONFIG_FILE_PATH + ".tmp"
         try:
             with open(tmp_path, "w") as f:
                 f.write(msg)
-            rename(tmp_path, self._config_path)
+            rename(tmp_path, CONFIG_FILE_PATH)
             self._logger.log("Config updated via MQTT - rebooting")
         except Exception as e:
             self._logger.log(f"Failed to write config: {e}")
@@ -404,5 +390,6 @@ class MqttHassManager:
                 valve_messager.publish_discovery_message()
 
             self._publish_all_calibration_states()
+            self._publish_config_current()
         except Exception as e:
             self._logger.log(f"Failed to republish after HA online: {e}")

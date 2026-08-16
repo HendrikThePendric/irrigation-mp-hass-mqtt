@@ -108,6 +108,9 @@ class MockConfig:
         }
         self.network = MockNetworkConfig()
 
+    def __str__(self) -> str:
+        return "Irrigation station config:\nstation_name: Test Station"
+
 
 class MockNetworkConfig:
     """Mock network configuration."""
@@ -197,20 +200,13 @@ class TestMqttHassManagerNew(unittest.TestCase):
         self.assertIn("irrigation/teststation/config/set", manager._client.subscribe_calls)
 
     def test_boot_echo_publishes_config_current(self) -> None:
-        """Test setup publishes the loaded config to config/current with secrets redacted."""
+        """Test setup publishes the config summary to config/current (retained)."""
         config = MockConfig()
         logger = MockLogger()
 
         manager = MqttHassManager(config, logger)  # type: ignore
 
-        file_writes["./config.json"] = (
-            '{"station_name": "Test Station", "network": {'
-            '"wifi_ssid": "MySSID", "wifi_password": "MySecret"}}'
-        )
-
         manager.setup()
-
-        import json
 
         echoed = None
         retain = False
@@ -221,10 +217,7 @@ class TestMqttHassManagerNew(unittest.TestCase):
 
         self.assertIsNotNone(echoed)
         self.assertTrue(retain)
-        parsed = json.loads(echoed)
-        self.assertEqual(parsed["station_name"], "Test Station")
-        self.assertEqual(parsed["network"]["wifi_ssid"], "REDACTED")
-        self.assertEqual(parsed["network"]["wifi_password"], "REDACTED")
+        self.assertEqual(echoed, str(config))
 
     def test_mqtt_hass_manager_get_station_instructions(self) -> None:
         """Test get_station_instructions method."""
@@ -399,6 +392,29 @@ class TestMqttHassManagerNew(unittest.TestCase):
         manager._handle_message(topic, payload)
 
         self.assertFalse("./config.json.tmp" in file_writes)
+        self.assertEqual(len(mock_machine.reset_calls), 0)
+
+    def test_handle_config_set_write_failure_does_not_reboot(self) -> None:
+        """Test a config write failure logs and does not reboot."""
+        config = MockConfig()
+        logger = MockLogger()
+
+        manager = MqttHassManager(config, logger)  # type: ignore
+
+        original_open = builtins.open
+
+        def failing_open(filename, mode="r"):
+            raise OSError("disk full")
+
+        builtins.open = failing_open
+        try:
+            manager._handle_message(
+                b"irrigation/teststation/config/set",
+                b'{"station_name": "Renamed Station"}',
+            )
+        finally:
+            builtins.open = original_open
+
         self.assertEqual(len(mock_machine.reset_calls), 0)
 
 
