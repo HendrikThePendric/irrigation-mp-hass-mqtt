@@ -26,7 +26,7 @@ class MachineModule:
     unique_id = mock_machine.unique_id
     RTC = type("MockRTC", (), {"datetime": lambda self: (2024, 1, 1, 0, 0, 0, 0, 0)})
     I2C = type("MockI2C", (), {"__init__": lambda self, *args, **kwargs: None})
-    reset = lambda: None
+    reset = mock_machine.reset
 
 
 # Add all mock modules to sys.modules
@@ -59,6 +59,40 @@ from mqtt_hass_manager import MqttHassManager, create_ssl_context  # type: ignor
 from irrigation_states import ValveState, SensorState  # type: ignore
 
 import unittest
+import builtins
+
+file_writes = {}
+file_opens = []
+
+
+class MockFile:
+    def __init__(self, filename, mode):
+        self.filename = filename
+        self.mode = mode
+        self.content = file_writes.get(filename, "") if "r" in mode else ""
+
+    def write(self, text):
+        self.content += text
+        file_writes[self.filename] = self.content
+
+    def read(self):
+        return self.content
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *args):
+        file_writes[self.filename] = self.content
+
+
+def mock_open(filename, mode="r"):
+    file_opens.append((filename, mode))
+    if filename not in file_writes:
+        file_writes[filename] = ""
+    return MockFile(filename, mode)
+
+
+builtins.open = mock_open
 
 
 class MockConfig:
@@ -73,6 +107,9 @@ class MockConfig:
             "pointb": MockPointConfig("Point B", 3, 0x49, 1),
         }
         self.network = MockNetworkConfig()
+
+    def __str__(self) -> str:
+        return "Irrigation station config:\nstation_name: Test Station"
 
 
 class MockNetworkConfig:
@@ -121,6 +158,10 @@ class TestMqttHassManagerNew(unittest.TestCase):
         from simple_mocks import MockMQTTClient
 
         MockMQTTClient.reset_instances()
+        file_writes.clear()
+        file_opens.clear()
+        mock_machine.reset_calls.clear()
+        mock_os.rename_calls.clear()
 
     def test_create_ssl_context(self) -> None:
         """Test create_ssl_context function."""
@@ -147,6 +188,55 @@ class TestMqttHassManagerNew(unittest.TestCase):
         manager.setup()
 
         self.assertTrue(manager._client.connected)
+
+    def test_setup_subscribes_to_config_topic(self) -> None:
+        """Test setup subscribes to the config/set topic."""
+        config = MockConfig()
+        logger = MockLogger()
+
+        manager = MqttHassManager(config, logger)  # type: ignore
+        manager.setup()
+
+        self.assertIn("irrigation/teststation/config/set", manager._client.subscribe_calls)
+
+    def test_boot_echo_publishes_config_current(self) -> None:
+        """Test setup publishes the config summary to config/current (retained)."""
+        config = MockConfig()
+        logger = MockLogger()
+
+        manager = MqttHassManager(config, logger)  # type: ignore
+
+        manager.setup()
+
+        echoed = None
+        retain = False
+        for topic, message, _retain, _qos in manager._client.published_messages:
+            if topic == "irrigation/teststation/config/current":
+                echoed = message
+                retain = _retain
+
+        self.assertIsNotNone(echoed)
+        self.assertTrue(retain)
+        self.assertEqual(echoed, str(config))
+
+    def test_republishes_config_current_on_ha_restart(self) -> None:
+        """Test config/current is republished when Home Assistant comes online."""
+        config = MockConfig()
+        logger = MockLogger()
+
+        manager = MqttHassManager(config, logger)  # type: ignore
+        manager.setup()
+
+        manager._client.published_messages.clear()
+
+        manager._handle_message(b"homeassistant/status", b"online")
+
+        self.assertTrue(
+            any(
+                topic == "irrigation/teststation/config/current"
+                for topic, message, retain, qos in manager._client.published_messages
+            )
+        )
 
     def test_mqtt_hass_manager_get_station_instructions(self) -> None:
         """Test get_station_instructions method."""
@@ -289,6 +379,62 @@ class TestMqttHassManagerNew(unittest.TestCase):
         commands = manager.get_voltage_commands()
         self.assertEqual(len(commands), 1)
         self.assertEqual(commands[0].point_id, "pointa")
+
+    def test_handle_config_set_writes_atomically_and_reboots(self) -> None:
+        """Test config/set message writes config atomically and reboots."""
+        config = MockConfig()
+        logger = MockLogger()
+
+        manager = MqttHassManager(config, logger)  # type: ignore
+
+        topic = b"irrigation/teststation/config/set"
+        payload = b'{"station_name": "Renamed Station"}'
+
+        manager._handle_message(topic, payload)
+
+        self.assertEqual(
+            file_writes["./config.json.tmp"], '{"station_name": "Renamed Station"}'
+        )
+        self.assertIn(("./config.json.tmp", "./config.json"), mock_os.rename_calls)
+        self.assertEqual(len(mock_machine.reset_calls), 1)
+
+    def test_handle_config_set_ignores_other_station_topics(self) -> None:
+        """Test config/set for a different station is ignored."""
+        config = MockConfig()
+        logger = MockLogger()
+
+        manager = MqttHassManager(config, logger)  # type: ignore
+
+        topic = b"irrigation/otherstation/config/set"
+        payload = b'{"station_name": "Renamed Station"}'
+
+        manager._handle_message(topic, payload)
+
+        self.assertFalse("./config.json.tmp" in file_writes)
+        self.assertEqual(len(mock_machine.reset_calls), 0)
+
+    def test_handle_config_set_write_failure_does_not_reboot(self) -> None:
+        """Test a config write failure logs and does not reboot."""
+        config = MockConfig()
+        logger = MockLogger()
+
+        manager = MqttHassManager(config, logger)  # type: ignore
+
+        original_open = builtins.open
+
+        def failing_open(filename, mode="r"):
+            raise OSError("disk full")
+
+        builtins.open = failing_open
+        try:
+            manager._handle_message(
+                b"irrigation/teststation/config/set",
+                b'{"station_name": "Renamed Station"}',
+            )
+        finally:
+            builtins.open = original_open
+
+        self.assertEqual(len(mock_machine.reset_calls), 0)
 
 
 if __name__ == "__main__":

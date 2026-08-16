@@ -1,6 +1,6 @@
 from mqtt_robust_client import MqttRobustClient
 
-from config import Config
+from config import CONFIG_FILE_PATH, Config
 from logger import Logger
 from irrigation_states import (
     ValveState,
@@ -12,6 +12,8 @@ from irrigation_states import (
 )
 
 from mqtt_hass_entities import MqttHassSensor, MqttHassValve, MessagerParams
+from machine import reset
+from os import rename
 from ssl import SSLContext, PROTOCOL_TLS_CLIENT
 from time import ticks_ms
 
@@ -104,6 +106,7 @@ class MqttHassManager:
 
             for point_id in self._config.irrigation_points:
                 self._subscribe_calibration_topics(point_id)
+            self._subscribe_config_topic()
             self._logger.log("Resubscribed to all command topics after reconnection")
         except Exception as e:
             self._logger.log(f"Failed to resubscribe after reconnection: {e}")
@@ -113,8 +116,10 @@ class MqttHassManager:
         self._connect()
         self._client.set_callback(self._handle_message)
         self._set_online()
+        self._publish_config_current()
         self._setup_entities()
         self._monitor_hass_status()
+        self._subscribe_config_topic()
 
     def process_messages(self) -> None:
         """Check for incoming MQTT messages. Call from the main loop."""
@@ -266,6 +271,25 @@ class MqttHassManager:
             except Exception as e:
                 self._logger.log(f"Failed to subscribe to {topic}: {e}")
 
+    def _subscribe_config_topic(self) -> None:
+        """Subscribe to the config overwrite command topic."""
+        topic = self._topic("config/set")
+        try:
+            self._client.subscribe(topic)
+        except Exception as e:
+            self._logger.log(f"Failed to subscribe to {topic}: {e}")
+
+    def _publish_config_current(self) -> None:
+        """Publish the loaded config summary (retained) for verification."""
+        try:
+            self._client.publish(
+                self._topic("config/current"),
+                str(self._config),
+                retain=True,
+            )
+        except Exception as e:
+            self._logger.log(f"Failed to publish current config: {e}")
+
     def _publish_all_calibration_states(self) -> None:
         """Publish retained calibration state for all points."""
         states = [
@@ -285,6 +309,10 @@ class MqttHassManager:
 
         if topic == "homeassistant/status":
             self._handle_ha_status_message(msg)
+            return
+
+        if topic == self._topic("config/set"):
+            self._handle_config_set(msg)
             return
 
         parts = topic.split("/")
@@ -334,6 +362,19 @@ class MqttHassManager:
         elif status == "offline":
             self._logger.log("Home Assistant went offline")
 
+    def _handle_config_set(self, msg: str) -> None:
+        """Overwrite config.json with the received payload, then reboot."""
+        tmp_path = CONFIG_FILE_PATH + ".tmp"
+        try:
+            with open(tmp_path, "w") as f:
+                f.write(msg)
+            rename(tmp_path, CONFIG_FILE_PATH)
+            self._logger.log("Config updated via MQTT - rebooting")
+        except Exception as e:
+            self._logger.log(f"Failed to write config: {e}")
+            return
+        reset()
+
     def _republish_after_ha_restart(self) -> None:
         """Re-publish availability, discovery messages, and calibration state after HA restart."""
         try:
@@ -349,5 +390,6 @@ class MqttHassManager:
                 valve_messager.publish_discovery_message()
 
             self._publish_all_calibration_states()
+            self._publish_config_current()
         except Exception as e:
             self._logger.log(f"Failed to republish after HA online: {e}")

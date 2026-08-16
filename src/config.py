@@ -8,6 +8,9 @@ _DEFAULT_DRY_V: float = 2.4  # 0.48 normalized * 5.0
 _DEFAULT_WET_V: float = 0.95  # 0.19 normalized * 5.0
 from machine import unique_id
 
+# Path of the main configuration file on the device.
+CONFIG_FILE_PATH: str = "./config.json"
+
 
 def _get_if_valid(key: str, conf: dict, value_type: type) -> any:  # type: ignore
     if key not in conf:
@@ -107,7 +110,7 @@ class IrrigationPointConfig:
 
 
 class Config:
-    def __init__(self, file_path: str) -> None:
+    def __init__(self, file_path: str = CONFIG_FILE_PATH) -> None:
         conf = _load_json_file(file_path)
         network_conf: dict = _get_if_valid("network", conf, dict)
         irrigation_points_conf: list = _get_if_valid("irrigation_points", conf, list)

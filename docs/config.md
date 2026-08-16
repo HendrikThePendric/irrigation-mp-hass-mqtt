@@ -109,3 +109,15 @@ The configuration is validated at startup. The station will not start if:
 ## Security
 
 `config.json` contains WiFi credentials and is excluded from git. Copy `config.template.json` to `config.json` and fill in your values.
+
+## Updating config over MQTT
+
+Once the station is installed, you can push a new `config.json` over MQTT without opening the enclosure:
+
+```bash
+./scripts/send_config.sh [path-to-config.json]
+```
+
+The script publishes the config to `irrigation/{station_id}/config/set`, the station overwrites `config.json` and reboots, and the script waits for the device to confirm the reboot before printing the config summary the device actually loaded (for you or an AI agent to verify). It exits `0` on success and non-zero on failure.
+
+No validation is performed before reboot — a malformed config will prevent the station from booting, requiring a USB cable to fix. The summary omits `network.wifi_password`, so a change that affects *only* the password is not detected by the script (it will time out and exit non-zero). Verify such a change manually — e.g., confirm the device reconnects to the broker.

@@ -5,7 +5,7 @@ from open_valve_persister import OpenValvePersister
 from logger import Logger
 from task_scheduler import TaskScheduler
 from watchdog import Watchdog
-from config import Config
+from config import CONFIG_FILE_PATH, Config
 from time_keeper import TimeKeeper
 from wifi_manager import WiFiManager
 from irrigation_states import ValveState
@@ -16,7 +16,7 @@ class FirmwareController:
     """Encapsulates the entire irrigation system with a tick-based main loop."""
 
     def __init__(
-        self, config_path: str = "./config.json", print_logs: bool = True
+        self, config_path: str = CONFIG_FILE_PATH, print_logs: bool = True
     ) -> None:
         """Initialize all system components.
 

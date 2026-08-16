@@ -41,32 +41,34 @@ reboot to apply the new configuration.
      so the write + reset are safe in-place.
 
 3. **Boot echo.** In `MqttHassManager.setup()`, after publishing availability, publish
-   the raw text of the loaded `config.json` to the retained topic
-   `irrigation/{station_id}/config/current`. This is the verification source the helper
-   diffs against.
+   the `str(config)` summary (which already omits `network.wifi_password`) to the
+   retained topic `irrigation/{station_id}/config/current`. This is the signal the
+   helper uses to confirm a reboot and to show the loaded configuration.
 
 ### Helper script (`scripts/send_config.sh`)
 
 Follows the existing `scripts/calibrate.sh` conventions (`mosquitto_cmd`,
 `require_mosquitto`, `discover_station_id`, `TLS_OPTS`, DER certs from `certs/`).
+It is designed to be driven by a human or an AI agent, with a clear exit code
+(`0` success, non-zero failure) and deterministic output.
 
 Flow:
 
-1. Read local `config.json` to obtain `network.mqtt_broker_ip` (with an env-var
-   override, mirroring `calibrate.sh`'s `MQTT_PORT` pattern).
+1. Read local `config.json` to obtain `network.mqtt_broker_ip` (with `MQTT_BROKER`
+   override), mirroring `calibrate.sh`'s `MQTT_PORT` pattern.
 2. Discover `station_id` (reuse the `irrigation/+/availability` retained subscribe and
-   `.station_id_cache` pattern).
+   `.station_id_cache` pattern; `STATION_ID` env override available).
 3. Publish the config file contents to `irrigation/{sid}/config/set`.
-4. Wait for the `availability` topic to go offline (reboot) then online (reconnect).
-5. Wait for a fresh retained `config/current`; `diff` it against the sent file and
-   print the result, including the new `station_name` so renames are obvious.
+4. Wait for the retained `config/current` echo to change (the device republishes it on
+   every boot), confirming the reboot and apply.
+5. Print the new `config/current` summary for the caller to verify against intent.
 
 ## MQTT topic summary
 
 | Topic | Direction | Retain | Purpose |
 |-------|-----------|--------|---------|
 | `irrigation/{sid}/config/set` | helper → device | no | Command to overwrite `config.json` and reboot |
-| `irrigation/{sid}/config/current` | device → helper | yes | Echo of the loaded `config.json` after boot |
+| `irrigation/{sid}/config/current` | device → helper | yes | `str(config)` summary after boot (password omitted) |
 | `irrigation/{sid}/availability` | device | yes | Existing LWT online/offline signal |
 
 ## Key decisions
@@ -84,7 +86,8 @@ Flow:
 ## Testing
 
 - Unit tests (MicroPython `unittest`, mock `machine`) for the `config/set` message
-  handler: valid payload writes atomically and triggers reset; the boot echo publishes
-  the loaded config.
+  handler: valid payload writes atomically and triggers reset; a write failure logs and
+  does not reset; the boot echo publishes `str(config)`; `str(config)` omits the WiFi
+  password.
 - Manual validation: run `send_config.sh` against the device, confirm the device
-  reboots, and the helper reports a clean diff.
+  reboots, and the script prints the new config summary and exits `0`.

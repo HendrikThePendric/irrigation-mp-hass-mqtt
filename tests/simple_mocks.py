@@ -133,6 +133,7 @@ class MockMachine:
         self.I2C = type("MockI2C", (), {"init": lambda self, **kwargs: None})
         self.Timer = TimerFactory(self)
         self.timers_created = []
+        self.reset_calls = []
 
     def unique_id(self) -> bytes:
         """Return a mock unique ID."""
@@ -140,13 +141,16 @@ class MockMachine:
 
     def reset(self) -> None:
         """Mock reset function."""
-        pass
+        self.reset_calls.append(())
 
 
 # Mock os module
 class MockOS:
     _files = {}
     """Mock os module."""
+
+    def __init__(self):
+        self.rename_calls = []
 
     # Essential attributes for unittest and standard library
     name = "posix"
@@ -224,7 +228,7 @@ class MockOS:
         pass
 
     def rename(self, old: str, new: str) -> None:
-        pass
+        self.rename_calls.append((old, new))
 
     @staticmethod
     def isatty(fd):
