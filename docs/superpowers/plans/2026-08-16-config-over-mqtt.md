@@ -191,6 +191,7 @@ In `src/mqtt_hass_manager.py`:
 4a. Add imports (before `from ssl import ...` on line 15):
 
 ```python
+from json import dumps, loads
 from machine import reset
 from os import rename
 from ssl import SSLContext, PROTOCOL_TLS_CLIENT
@@ -246,13 +247,18 @@ from ssl import SSLContext, PROTOCOL_TLS_CLIENT
             self._logger.log(f"Failed to subscribe to {topic}: {e}")
 
     def _publish_config_current(self) -> None:
-        """Publish the loaded config file contents (retained) for verification."""
+        """Publish the loaded config (retained) for verification, secrets redacted."""
         try:
             with open(self._config_path) as f:
                 config_text = f.read()
+            conf = loads(config_text)
+            network = conf.get("network")
+            if isinstance(network, dict):
+                network["wifi_ssid"] = "REDACTED"
+                network["wifi_password"] = "REDACTED"
             self._client.publish(
                 self._topic("config/current"),
-                config_text,
+                dumps(conf),
                 retain=True,
             )
         except Exception as e:
@@ -503,7 +509,18 @@ verify_config() {
         return 1
     fi
     printf '%s\n' "$current" > "$tmp"
-    python3 -c "import json,sys; sent=json.load(open(sys.argv[1])); got=json.load(open(sys.argv[2])); sys.exit(0 if sent==got else 1)" "$CONFIG_FILE" "$tmp" 2>/dev/null
+    python3 -c '
+import json, sys
+def redact(conf):
+    net = conf.get("network")
+    if isinstance(net, dict):
+        net["wifi_ssid"] = "REDACTED"
+        net["wifi_password"] = "REDACTED"
+    return conf
+sent = redact(json.load(open(sys.argv[1])))
+got = redact(json.load(open(sys.argv[2])))
+sys.exit(0 if sent == got else 1)
+' "$CONFIG_FILE" "$tmp" 2>/dev/null
     rm -f "$tmp"
 }
 
@@ -587,7 +604,7 @@ Add a new subsection under "## Subscriptions" (after "### Home Assistant status"
 
 **Topic:** `irrigation/{station_id}/config/set`
 
-Payload: the full `config.json` contents. On receipt, the station atomically overwrites `config.json` and reboots. After boot it republishes the loaded config to `config/current` (retained) for verification.
+Payload: the full `config.json` contents. On receipt, the station atomically overwrites `config.json` and reboots. After boot it republishes the loaded config to `config/current` (retained) for verification, with `network.wifi_ssid` and `network.wifi_password` redacted to `"REDACTED"` so credentials are not persisted on the broker.
 ```
 
 Add a bullet to "## Reconnection behavior":
@@ -609,7 +626,7 @@ Once the station is installed, you can push a new `config.json` over MQTT withou
 ./scripts/send_config.sh [path-to-config.json]
 ```
 
-The script publishes the config to `irrigation/{station_id}/config/set`, the station overwrites `config.json` and reboots, and the script verifies the device loaded the exact file by diffing the retained `config/current` echo. No validation is performed before reboot — a malformed config will prevent the station from booting, requiring a USB cable to fix.
+The script publishes the config to `irrigation/{station_id}/config/set`, the station overwrites `config.json` and reboots, and the script verifies the device loaded the exact file by comparing the retained `config/current` echo (which redacts WiFi credentials). No validation is performed before reboot — a malformed config will prevent the station from booting, requiring a USB cable to fix.
 ```
 
 - [ ] **Step 3: Commit**
