@@ -12,6 +12,8 @@ from irrigation_states import (
 )
 
 from mqtt_hass_entities import MqttHassSensor, MqttHassValve, MessagerParams
+from machine import reset
+from os import rename
 from ssl import SSLContext, PROTOCOL_TLS_CLIENT
 from time import ticks_ms
 
@@ -40,9 +42,11 @@ class MqttHassManager:
         self,
         config: Config,
         logger: Logger,
+        config_path: str = "./config.json",
     ) -> None:
         self._config = config
         self._logger = logger
+        self._config_path = config_path
         self._pending_valve_commands: list[ValveState] = []
         self._pending_calibration_commands: list[CalibrationCommand] = []
         self._pending_voltage_commands: list[VoltageCommand] = []
@@ -104,6 +108,7 @@ class MqttHassManager:
 
             for point_id in self._config.irrigation_points:
                 self._subscribe_calibration_topics(point_id)
+            self._subscribe_config_topic()
             self._logger.log("Resubscribed to all command topics after reconnection")
         except Exception as e:
             self._logger.log(f"Failed to resubscribe after reconnection: {e}")
@@ -113,8 +118,10 @@ class MqttHassManager:
         self._connect()
         self._client.set_callback(self._handle_message)
         self._set_online()
+        self._publish_config_current()
         self._setup_entities()
         self._monitor_hass_status()
+        self._subscribe_config_topic()
 
     def process_messages(self) -> None:
         """Check for incoming MQTT messages. Call from the main loop."""
@@ -265,6 +272,27 @@ class MqttHassManager:
                 self._client.subscribe(topic)
             except Exception as e:
                 self._logger.log(f"Failed to subscribe to {topic}: {e}")
+
+    def _subscribe_config_topic(self) -> None:
+        """Subscribe to the config overwrite command topic."""
+        topic = self._topic("config/set")
+        try:
+            self._client.subscribe(topic)
+        except Exception as e:
+            self._logger.log(f"Failed to subscribe to {topic}: {e}")
+
+    def _publish_config_current(self) -> None:
+        """Publish the loaded config file contents (retained) for verification."""
+        try:
+            with open(self._config_path) as f:
+                config_text = f.read()
+            self._client.publish(
+                self._topic("config/current"),
+                config_text,
+                retain=True,
+            )
+        except Exception as e:
+            self._logger.log(f"Failed to publish current config: {e}")
 
     def _publish_all_calibration_states(self) -> None:
         """Publish retained calibration state for all points."""

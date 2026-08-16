@@ -26,7 +26,7 @@ class MachineModule:
     unique_id = mock_machine.unique_id
     RTC = type("MockRTC", (), {"datetime": lambda self: (2024, 1, 1, 0, 0, 0, 0, 0)})
     I2C = type("MockI2C", (), {"__init__": lambda self, *args, **kwargs: None})
-    reset = lambda: None
+    reset = mock_machine.reset
 
 
 # Add all mock modules to sys.modules
@@ -59,6 +59,40 @@ from mqtt_hass_manager import MqttHassManager, create_ssl_context  # type: ignor
 from irrigation_states import ValveState, SensorState  # type: ignore
 
 import unittest
+import builtins
+
+file_writes = {}
+file_opens = []
+
+
+class MockFile:
+    def __init__(self, filename, mode):
+        self.filename = filename
+        self.mode = mode
+        self.content = file_writes.get(filename, "") if "r" in mode else ""
+
+    def write(self, text):
+        self.content += text
+        file_writes[self.filename] = self.content
+
+    def read(self):
+        return self.content
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *args):
+        file_writes[self.filename] = self.content
+
+
+def mock_open(filename, mode="r"):
+    file_opens.append((filename, mode))
+    if filename not in file_writes:
+        file_writes[filename] = ""
+    return MockFile(filename, mode)
+
+
+builtins.open = mock_open
 
 
 class MockConfig:
@@ -121,6 +155,10 @@ class TestMqttHassManagerNew(unittest.TestCase):
         from simple_mocks import MockMQTTClient
 
         MockMQTTClient.reset_instances()
+        file_writes.clear()
+        file_opens.clear()
+        mock_machine.reset_calls.clear()
+        mock_os.rename_calls.clear()
 
     def test_create_ssl_context(self) -> None:
         """Test create_ssl_context function."""
@@ -147,6 +185,36 @@ class TestMqttHassManagerNew(unittest.TestCase):
         manager.setup()
 
         self.assertTrue(manager._client.connected)
+
+    def test_setup_subscribes_to_config_topic(self) -> None:
+        """Test setup subscribes to the config/set topic."""
+        config = MockConfig()
+        logger = MockLogger()
+
+        manager = MqttHassManager(config, logger)  # type: ignore
+        manager.setup()
+
+        self.assertIn("irrigation/teststation/config/set", manager._client.subscribe_calls)
+
+    def test_boot_echo_publishes_config_current(self) -> None:
+        """Test setup publishes the loaded config to config/current (retained)."""
+        config = MockConfig()
+        logger = MockLogger()
+
+        manager = MqttHassManager(config, logger)  # type: ignore
+
+        file_writes["./config.json"] = '{"station_name": "Test Station"}'
+
+        manager.setup()
+
+        self.assertTrue(
+            any(
+                topic == "irrigation/teststation/config/current"
+                and message == '{"station_name": "Test Station"}'
+                and retain is True
+                for topic, message, retain, qos in manager._client.published_messages
+            )
+        )
 
     def test_mqtt_hass_manager_get_station_instructions(self) -> None:
         """Test get_station_instructions method."""

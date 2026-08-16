@@ -32,7 +32,9 @@ class FirmwareController:
             sensor_measurement_interval=self._config.measurement_interval,
             mqtt_publish_interval=self._config.publish_interval,
         )
-        self._mqtt_manager = MqttHassManager(self._config, self._logger)
+        self._mqtt_manager = MqttHassManager(
+            self._config, self._logger, config_path=config_path
+        )
         self._open_valve_persister = OpenValvePersister(self._config, self._logger)
         self._station = IrrigationStation(
             self._config, self._logger, self._open_valve_persister
