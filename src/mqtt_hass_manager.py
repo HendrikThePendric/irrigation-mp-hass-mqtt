@@ -325,6 +325,10 @@ class MqttHassManager:
             self._handle_ha_status_message(msg)
             return
 
+        if topic == self._topic("config/set"):
+            self._handle_config_set(msg)
+            return
+
         parts = topic.split("/")
         if (
             len(parts) < 4
@@ -371,6 +375,19 @@ class MqttHassManager:
             self._republish_after_ha_restart()
         elif status == "offline":
             self._logger.log("Home Assistant went offline")
+
+    def _handle_config_set(self, msg: str) -> None:
+        """Overwrite config.json with the received payload, then reboot."""
+        tmp_path = self._config_path + ".tmp"
+        try:
+            with open(tmp_path, "w") as f:
+                f.write(msg)
+            rename(tmp_path, self._config_path)
+            self._logger.log("Config updated via MQTT - rebooting")
+        except Exception as e:
+            self._logger.log(f"Failed to write config: {e}")
+            return
+        reset()
 
     def _republish_after_ha_restart(self) -> None:
         """Re-publish availability, discovery messages, and calibration state after HA restart."""

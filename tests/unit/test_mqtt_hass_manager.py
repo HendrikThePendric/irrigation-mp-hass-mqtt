@@ -368,6 +368,39 @@ class TestMqttHassManagerNew(unittest.TestCase):
         self.assertEqual(len(commands), 1)
         self.assertEqual(commands[0].point_id, "pointa")
 
+    def test_handle_config_set_writes_atomically_and_reboots(self) -> None:
+        """Test config/set message writes config atomically and reboots."""
+        config = MockConfig()
+        logger = MockLogger()
+
+        manager = MqttHassManager(config, logger)  # type: ignore
+
+        topic = b"irrigation/teststation/config/set"
+        payload = b'{"station_name": "Renamed Station"}'
+
+        manager._handle_message(topic, payload)
+
+        self.assertEqual(
+            file_writes["./config.json.tmp"], '{"station_name": "Renamed Station"}'
+        )
+        self.assertIn(("./config.json.tmp", "./config.json"), mock_os.rename_calls)
+        self.assertEqual(len(mock_machine.reset_calls), 1)
+
+    def test_handle_config_set_ignores_other_station_topics(self) -> None:
+        """Test config/set for a different station is ignored."""
+        config = MockConfig()
+        logger = MockLogger()
+
+        manager = MqttHassManager(config, logger)  # type: ignore
+
+        topic = b"irrigation/otherstation/config/set"
+        payload = b'{"station_name": "Renamed Station"}'
+
+        manager._handle_message(topic, payload)
+
+        self.assertFalse("./config.json.tmp" in file_writes)
+        self.assertEqual(len(mock_machine.reset_calls), 0)
+
 
 if __name__ == "__main__":
     # Run the tests
