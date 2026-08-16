@@ -11,6 +11,8 @@ The station connects to the MQTT broker over TLS (port 8883) with client certifi
 | `irrigation/{station_id}/{point_id}/valve/state` | Publish | Current valve state |
 | `irrigation/{station_id}/{point_id}/valve/set` | Subscribe | Valve open/close commands |
 | `irrigation/{station_id}/broker_connectivity` | Publish | Connectivity test messages |
+| `irrigation/{station_id}/config/set` | Subscribe | Command to overwrite `config.json` and reboot |
+| `irrigation/{station_id}/config/current` | Publish | Echo of the loaded `config.json` after boot (retained, secrets redacted) |
 | `homeassistant/sensor/{station_id}-{point_id}/config` | Publish | HA sensor discovery |
 | `homeassistant/valve/{station_id}-{point_id}/config` | Publish | HA valve discovery |
 | `homeassistant/status` | Subscribe | HA restart detection |
@@ -114,6 +116,16 @@ The station subscribes to the command topic for each irrigation point. When a co
 
 When Home Assistant publishes `"online"` (after a restart), the station re-publishes its availability and all discovery messages so entities are re-registered.
 
+### Config overwrite
+
+**Topic:** `irrigation/{station_id}/config/set`
+
+Payload: the full `config.json` contents. On receipt, the station atomically overwrites `config.json` and reboots. After boot it republishes the loaded config to `config/current` (retained) for verification, with `network.wifi_ssid` and `network.wifi_password` redacted to `"REDACTED"` so credentials are not persisted on the broker.
+
+**Topic:** `irrigation/{station_id}/config/current`
+
+Payload: the loaded `config.json` (WiFi credentials redacted). Retained. Used by `scripts/send_config.sh` to verify a config update was applied.
+
 ## Reconnection behavior
 
 On MQTT reconnection, the station automatically:
@@ -121,3 +133,4 @@ On MQTT reconnection, the station automatically:
 1. Re-publishes availability as `"online"`
 2. Re-subscribes to `homeassistant/status`
 3. Re-subscribes to all valve command topics
+4. Re-subscribes to `irrigation/{station_id}/config/set`
