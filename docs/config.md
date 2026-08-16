@@ -120,4 +120,4 @@ Once the station is installed, you can push a new `config.json` over MQTT withou
 
 The script publishes the config to `irrigation/{station_id}/config/set`, the station overwrites `config.json` and reboots, and the script waits for the device to confirm the reboot before printing the config summary the device actually loaded (for you or an AI agent to verify). It exits `0` on success and non-zero on failure.
 
-No validation is performed before reboot — a malformed config will prevent the station from booting, requiring a USB cable to fix. Changes to `network.wifi_password` are not shown in the summary (the password is omitted) and are only confirmed indirectly, by the device coming back online.
+No validation is performed before reboot — a malformed config will prevent the station from booting, requiring a USB cable to fix. The summary omits `network.wifi_password`, so a change that affects *only* the password is not detected by the script (it will time out and exit non-zero). Verify such a change manually — e.g., confirm the device reconnects to the broker.

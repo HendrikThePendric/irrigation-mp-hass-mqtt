@@ -59,8 +59,7 @@ get_broker() {
         echo "Set MQTT_BROKER to override." >&2
         exit 1
     fi
-    echo "Broker: $BROKER (from $CONFIG_FILE)" >&2
-    echo "If you changed mqtt_broker_ip, set MQTT_BROKER to the device's current broker." >&2
+    echo "Broker: $BROKER (from $CONFIG_FILE; set MQTT_BROKER to target a different broker)" >&2
 }
 
 discover_station_id() {

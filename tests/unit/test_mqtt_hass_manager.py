@@ -219,6 +219,25 @@ class TestMqttHassManagerNew(unittest.TestCase):
         self.assertTrue(retain)
         self.assertEqual(echoed, str(config))
 
+    def test_republishes_config_current_on_ha_restart(self) -> None:
+        """Test config/current is republished when Home Assistant comes online."""
+        config = MockConfig()
+        logger = MockLogger()
+
+        manager = MqttHassManager(config, logger)  # type: ignore
+        manager.setup()
+
+        manager._client.published_messages.clear()
+
+        manager._handle_message(b"homeassistant/status", b"online")
+
+        self.assertTrue(
+            any(
+                topic == "irrigation/teststation/config/current"
+                for topic, message, retain, qos in manager._client.published_messages
+            )
+        )
+
     def test_mqtt_hass_manager_get_station_instructions(self) -> None:
         """Test get_station_instructions method."""
         config = MockConfig()
